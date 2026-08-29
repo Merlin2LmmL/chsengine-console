@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>chsengine console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">&gt;_</span>
+    <span class="brand-name">chsengine console</span>
+  </div>
+  <div class="conn-controls">
+    <input id="token-input" type="password" placeholder="Lichess bot API token" autocomplete="off" spellcheck="false">
+    <button id="connect-btn" class="btn-primary">Connect</button>
+    <button id="upgrade-bot-btn" class="btn-small btn-danger" hidden>Upgrade to BOT</button>
+    <span id="account-status" class="account-status">not connected</span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <section class="col-left">
+    <div class="panel board-panel">
+      <div id="board-container" class="board-container"></div>
+      <div class="telemetry-wrap">
+        <canvas id="telemetry" width="560" height="70"></canvas>
+        <div id="telemetry-readout" class="telemetry-readout"></div>
+      </div>
+      <div id="game-info" class="game-info dim">No active game selected</div>
+      <div class="game-controls">
+        <button id="resign-btn" class="btn-small btn-danger">Resign</button>
+        <button id="abort-btn" class="btn-small btn-danger">Abort</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Active games</h2>
+      <div id="game-list" class="game-list"><div class="dim">No active games</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Incoming challenges <button id="decline-all-btn" class="btn-tiny">decline all</button></h2>
+      <div id="pending-challenges" class="pending-list"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Record <button id="reset-stats-btn" class="btn-tiny">reset</button></h2>
+      <div id="stats-display" class="stats-display"></div>
+    </div>
+  </section>
+
+  <section class="col-right">
+
+    <div class="panel">
+      <h2>Engine bundle</h2>
+      <div id="engine-name" class="engine-name">No engine loaded</div>
+      <div id="engine-status" class="engine-status">Drop a .zip bundle, or its manifest.json/entry.js/assets, to begin</div>
+      <div id="drop-zone" class="drop-zone">
+        drop <code>.zip</code> bundle here, or click to browse
+      </div>
+      <input id="bundle-file-input" type="file" accept=".zip,.js,.json" multiple hidden>
+    </div>
+
+    <div class="panel">
+      <h2>Time management</h2>
+      <label class="field">
+        <span>Depth mode</span>
+        <select id="time-mode">
+          <option value="dynamic">Dynamic (time-based)</option>
+          <option value="static">Static depth</option>
+        </select>
+      </label>
+
+      <div id="static-settings" class="subgroup">
+        <label class="field"><span>Fixed depth</span><input id="static-depth" type="number" min="1" max="12" step="1"></label>
+        <label class="field"><span>Safety cap (ms)</span><input id="static-safety-ms" type="number" min="500" max="15000" step="100"></label>
+      </div>
+
+      <div id="dynamic-settings" class="subgroup">
+        <label class="field"><span>Est. moves left</span><input id="dynamic-est-moves" type="number" min="5" max="80" step="1"></label>
+        <label class="field"><span>Increment weight</span><input id="dynamic-inc-weight" type="number" min="0" max="1" step="0.05"></label>
+        <label class="field"><span>Max fraction of clock / move</span><input id="dynamic-max-frac" type="number" min="0.05" max="1" step="0.05"></label>
+        <label class="field"><span>Min move time (ms)</span><input id="dynamic-min-ms" type="number" min="50" max="5000" step="50"></label>
+        <label class="field"><span>Max move time (ms)</span><input id="dynamic-max-ms" type="number" min="500" max="15000" step="100"></label>
+        <label class="field"><span>Network overhead (ms)</span><input id="dynamic-overhead-ms" type="number" min="0" max="3000" step="50"></label>
+        <label class="field"><span>Depth ceiling</span><input id="dynamic-max-depth" type="number" min="1" max="60" step="1"></label>
+      </div>
+      <p class="hint">Engine has its own 15s hard cap regardless of these settings.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Matchmaking</h2>
+      <label class="field checkbox"><input id="auto-accept" type="checkbox"><span>Auto-accept matching challenges</span></label>
+      <label class="field">
+        <span>Rated filter</span>
+        <select id="rated-mode">
+          <option value="both">Rated + casual</option>
+          <option value="rated">Rated only</option>
+          <option value="casual">Casual only</option>
+        </select>
+      </label>
+      <label class="field"><span>Max concurrent games</span><input id="max-concurrent" type="number" min="1" max="9" step="1"></label>
+      <div class="speed-grid">
+        <label class="field checkbox"><input id="speed-bullet" type="checkbox"><span>Bullet</span></label>
+        <label class="field checkbox"><input id="speed-blitz" type="checkbox"><span>Blitz</span></label>
+        <label class="field checkbox"><input id="speed-rapid" type="checkbox"><span>Rapid</span></label>
+        <label class="field checkbox"><input id="speed-classical" type="checkbox"><span>Classical</span></label>
+        <label class="field checkbox"><input id="speed-correspondence" type="checkbox"><span>Correspondence</span></label>
+      </div>
+      <p class="hint">Only the "standard" variant is supported (the bundled engine's board logic doesn't handle chess variants).</p>
+    </div>
+
+    <div class="panel">
+      <h2>Auto-queue</h2>
+      <label class="field checkbox"><input id="autoqueue-enabled" type="checkbox"><span>Auto-queue (on connect + after each game)</span></label>
+      <label class="field">
+        <span>Queue mode</span>
+        <select id="autoqueue-mode">
+          <option value="open">Open challenge</option>
+          <option value="targets">Challenge users</option>
+          <option value="bots">Challenge online bots</option>
+        </select>
+      </label>
+      <div id="autoqueue-targets-group" class="subgroup">
+        <label class="field-block">
+          <span>Usernames (comma-separated)</span>
+          <input id="autoqueue-targets" type="text" placeholder="opponent1, opponent2">
+        </label>
+      </div>
+      <div id="autoqueue-bots-group" class="subgroup">
+        <label class="field"><span>Bots to challenge per attempt</span><input id="autoqueue-bots-per-attempt" type="number" min="1" max="20" step="1"></label>
+        <p class="hint">Pulls the live list of currently-online bot accounts from Lichess and challenges a random sample each attempt, skipping anyone challenged in the last 10 minutes.</p>
+      </div>
+      <label class="field"><span>Clock limit (sec)</span><input id="autoqueue-clock-limit" type="number" min="0" max="10800" step="15"></label>
+      <label class="field"><span>Clock increment (sec)</span><input id="autoqueue-clock-increment" type="number" min="0" max="180" step="1"></label>
+      <label class="field checkbox"><input id="autoqueue-rated" type="checkbox"><span>Rated</span></label>
+      <label class="field"><span>Retry interval (sec)</span><input id="autoqueue-interval" type="number" min="5" max="600" step="5"></label>
+      <button id="queue-now-btn" class="btn-small">Queue now</button>
+      <p class="hint">Only posts "standard" variant challenges — same limitation as above. Retries on an interval whenever below "Max concurrent games", and fires once right after each game you finish.</p>
+    </div>
+
+    <div class="panel log-panel">
+      <h2>Log</h2>
+      <div id="log" class="log"></div>
+    </div>
+
+  </section>
+
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
