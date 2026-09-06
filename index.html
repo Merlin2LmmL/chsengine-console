@@ -39,17 +39,17 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-collapse-key="games">
       <h2>Active games</h2>
       <div id="game-list" class="game-list"><div class="dim">No active games</div></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-collapse-key="challenges">
       <h2>Incoming challenges <button id="decline-all-btn" class="btn-tiny">decline all</button></h2>
       <div id="pending-challenges" class="pending-list"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-collapse-key="record">
       <h2>Record <button id="reset-stats-btn" class="btn-tiny">reset</button></h2>
       <div id="stats-display" class="stats-display"></div>
     </div>
@@ -57,7 +57,7 @@
 
   <section class="col-right">
 
-    <div class="panel">
+    <div class="panel" data-collapse-key="engine">
       <h2>Engine bundle</h2>
       <div id="engine-name" class="engine-name">No engine loaded</div>
       <div id="engine-status" class="engine-status">Drop a .zip bundle, or its manifest.json/entry.js/assets, to begin</div>
@@ -67,8 +67,23 @@
       <input id="bundle-file-input" type="file" accept=".zip,.js,.json" multiple hidden>
     </div>
 
-    <div class="panel">
-      <h2>Time management</h2>
+    <div class="panel" data-collapse-key="time">
+      <h2>Time management <span class="info-icon" tabindex="0" data-tip="Choose a fixed search depth for consistent behavior, or let the bot manage time dynamically based on the clock so it speeds up when time is short. The engine also enforces its own 15s hard cap regardless of these settings.">?</span></h2>
+
+      <div class="preset-row">
+        <label class="field">
+          <span>Preset</span>
+          <select id="time-preset-select">
+            <option value="">— select a preset —</option>
+          </select>
+        </label>
+        <div class="preset-actions">
+          <input id="time-preset-name" type="text" placeholder="name to save as…">
+          <button id="time-preset-save-btn" class="btn-tiny">Save</button>
+          <button id="time-preset-delete-btn" class="btn-tiny btn-danger">Delete</button>
+        </div>
+      </div>
+
       <label class="field">
         <span>Depth mode</span>
         <select id="time-mode">
@@ -91,13 +106,12 @@
         <label class="field"><span>Network overhead (ms)</span><input id="dynamic-overhead-ms" type="number" min="0" max="3000" step="50"></label>
         <label class="field"><span>Depth ceiling</span><input id="dynamic-max-depth" type="number" min="1" max="60" step="1"></label>
       </div>
-      <p class="hint">Engine has its own 15s hard cap regardless of these settings.</p>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-collapse-key="matchmaking">
       <h2>Matchmaking</h2>
 
-      <h3>Accepting challenges</h3>
+      <h3>Accepting challenges <span class="info-icon" tabindex="0" data-tip="Only the &quot;standard&quot; variant is supported — the bundled engine's board logic doesn't handle chess variants. &quot;Max concurrent games&quot; also gates auto-queue below.">?</span></h3>
       <label class="field checkbox"><input id="auto-accept" type="checkbox"><span>Auto-accept matching challenges</span></label>
       <label class="field">
         <span>Rated filter</span>
@@ -115,9 +129,8 @@
         <label class="field checkbox"><input id="speed-classical" type="checkbox"><span>Classical</span></label>
         <label class="field checkbox"><input id="speed-correspondence" type="checkbox"><span>Correspondence</span></label>
       </div>
-      <p class="hint">Only the "standard" variant is supported (the bundled engine's board logic doesn't handle chess variants). "Max concurrent games" also gates auto-queue below.</p>
 
-      <h3>Auto-queue</h3>
+      <h3>Auto-queue <span class="info-icon" tabindex="0" data-tip="Only posts &quot;standard&quot; variant challenges — same limitation as above. Retries on an interval whenever below &quot;Max concurrent games&quot;, and fires once right after each game you finish.">?</span></h3>
       <label class="field checkbox"><input id="autoqueue-enabled" type="checkbox"><span>Auto-queue (on connect + after each game)</span></label>
       <label class="field">
         <span>Queue mode</span>
@@ -138,20 +151,17 @@
         </label>
       </div>
       <div id="autoqueue-bots-group" class="subgroup">
-        <label class="field"><span>Bots to challenge per attempt</span><input id="autoqueue-bots-per-attempt" type="number" min="1" max="20" step="1"></label>
+        <label class="field"><span>Bots to challenge per attempt <span class="info-icon" tabindex="0" data-tip="Pulls the live list of currently-online bot accounts from Lichess and challenges a random sample each attempt, skipping anyone challenged in the last 10 minutes or currently on cooldown.">?</span></span><input id="autoqueue-bots-per-attempt" type="number" min="1" max="20" step="1"></label>
         <label class="field"><span>Min rating</span><input id="autoqueue-bot-rating-min" type="number" min="0" max="3500" step="10"></label>
-        <label class="field"><span>Max rating</span><input id="autoqueue-bot-rating-max" type="number" min="0" max="3500" step="10"></label>
-        <p class="hint">Rating checked is the bot's rating in the perf matching the time control above (e.g. "3+2" checks blitz rating). Bots with no recorded rating for that perf are skipped, not assumed in-range.</p>
-        <p class="hint">Pulls the live list of currently-online bot accounts from Lichess and challenges a random sample each attempt, skipping anyone challenged in the last 10 minutes or currently on cooldown.</p>
+        <label class="field"><span>Max rating <span class="info-icon" tabindex="0" data-tip="Rating checked is the bot's rating in the perf matching the time control above (e.g. &quot;3+2&quot; checks blitz rating). Bots with no recorded rating for that perf are skipped, not assumed in-range.">?</span></span><input id="autoqueue-bot-rating-max" type="number" min="0" max="3500" step="10"></label>
         <div id="bot-cooldowns-display" class="dim"></div>
       </div>
       <label class="field checkbox"><input id="autoqueue-rated" type="checkbox"><span>Rated</span></label>
       <label class="field"><span>Retry interval (sec)</span><input id="autoqueue-interval" type="number" min="5" max="600" step="5"></label>
       <button id="queue-now-btn" class="btn-small">Queue now</button>
-      <p class="hint">Only posts "standard" variant challenges — same limitation as above. Retries on an interval whenever below "Max concurrent games", and fires once right after each game you finish.</p>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-collapse-key="chat">
       <h2>Chat</h2>
       <label class="field checkbox"><input id="chat-motd-enabled" type="checkbox"><span>Send a message when a game starts</span></label>
       <label class="field-block">
@@ -161,24 +171,13 @@
       <label class="field checkbox"><input id="chat-commands-enabled" type="checkbox"><span>Enable custom chat commands</span></label>
       <label class="field"><span>Command prefix</span><input id="chat-command-prefix" type="text" maxlength="3" style="width:3em"></label>
       <label class="field-block">
-        <span>Command handler (JS)</span>
-        <textarea id="chat-commands-code" rows="10" spellcheck="false" placeholder="function handleCommand(cmd, args, ctx) {&#10;  if (cmd === 'rating') return 'no clue, ask lichess';&#10;  return null; // no reply&#10;}"></textarea>
+        <span>Command handler (JS) <span class="info-icon" tabindex="0" data-tip="Define function handleCommand(cmd, args, ctx). Called for every opponent chat line starting with the prefix above (cmd lowercased, args the rest split on whitespace). Return a string to send back as a chat reply, or null/nothing to stay silent — it can also be async. ctx gives you { gameId, color, opponent, movesPlayed, chess, eval, log }: chess is the live chess.js instance (read it, don't mutate it); eval is your engine's last finished search result for this game — { depth, scoreCp, nodes, nps, timeMs } from the side to move's perspective, or null if no search has completed yet. This runs as plain JS in your own browser tab with no sandboxing — only paste code you trust.">?</span></span>
+        <textarea id="chat-commands-code" rows="12" spellcheck="false" placeholder="function handleCommand(cmd, args, ctx) {&#10;  if (cmd === 'eval') {&#10;    if (!ctx.eval) return &quot;haven't finished a search yet&quot;;&#10;    const pawns = (ctx.eval.scoreCp / 100).toFixed(2);&#10;    return `eval: ${pawns} (depth ${ctx.eval.depth}, from ${ctx.color} to move)`;&#10;  }&#10;  if (cmd === 'rating') return 'no clue, ask lichess';&#10;  return null; // no reply&#10;}"></textarea>
       </label>
-      <p class="hint">
-        Define <code>function handleCommand(cmd, args, ctx)</code>. It's called for every
-        opponent chat line starting with the prefix above (<code>cmd</code> lowercased,
-        <code>args</code> the rest split on whitespace). Return a string to send back as a
-        chat reply, or <code>null</code>/nothing to stay silent — it can also be
-        <code>async</code>. <code>ctx</code> gives you
-        <code>{ gameId, color, opponent, movesPlayed, chess, log }</code>, where
-        <code>chess</code> is the live chess.js instance for that game (read it, don't
-        mutate it). This runs as plain JS in your own browser tab with no sandboxing —
-        only paste code you trust.
-      </p>
       <button id="chat-test-compile-btn" class="btn-small">Test compile</button>
     </div>
 
-    <div class="panel log-panel">
+    <div class="panel log-panel" data-collapse-key="log">
       <h2>Log</h2>
       <div id="log" class="log"></div>
     </div>

@@ -117,6 +117,76 @@ code { font-family: var(--font); }
 
 .dim { color: var(--dim); }
 
+/* ---------------- Collapsible panels ---------------- */
+
+.panel[data-collapse-key] > h2 {
+  cursor: pointer;
+  user-select: none;
+}
+.panel-chevron {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--dim);
+  transition: transform 0.12s ease;
+  transform: rotate(90deg);
+}
+.panel.collapsed .panel-chevron { transform: rotate(0deg); }
+.panel.collapsed .panel-body { display: none; }
+.panel.collapsed > h2 { margin-bottom: 0; }
+
+/* ---------------- Tooltips ---------------- */
+
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--dim);
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+}
+.info-icon:hover, .info-icon:focus {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  outline: none;
+}
+.info-icon::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 130%;
+  left: 0;
+  width: 240px;
+  max-width: 60vw;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  white-space: normal;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 30;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+}
+.info-icon:hover::after, .info-icon:focus::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* ---------------- Board ---------------- */
 
 .board-container { display: flex; justify-content: center; }
@@ -232,6 +302,31 @@ code { font-family: var(--font); }
 }
 
 #queue-now-btn { margin-top: 4px; }
+
+/* ---------------- Time presets ---------------- */
+
+.preset-row {
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.preset-row select { width: 100%; }
+.preset-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.preset-actions input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-family: var(--font);
+  font-size: 12px;
+}
 
 .subgroup { padding-top: 4px; }
 .speed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }

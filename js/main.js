@@ -131,9 +131,23 @@ function errDetail(e) {
   let detail = e.body;
   try {
     const parsed = JSON.parse(e.body);
-    detail = parsed.error || parsed.message || e.body;
+    detail = flattenErrorField(parsed.error ?? parsed.message ?? e.body);
   } catch (_) { /* body wasn't JSON, use it as-is */ }
   return detail ? `${e.message} (${detail})` : e.message;
+}
+
+/** Lichess error bodies aren't always a plain string — form-style validation errors come
+ * back as {"field": ["message", ...], ...} (this is what was silently turning into the
+ * useless "[object Object]" previously logged for the message-of-the-day chat failure).
+ * Flatten whatever shape shows up into a readable string instead of trusting it's a string. */
+function flattenErrorField(raw) {
+  if (raw == null) return '';
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) return raw.map(flattenErrorField).join(', ');
+  if (typeof raw === 'object') {
+    return Object.entries(raw).map(([k, v]) => `${k}: ${flattenErrorField(v)}`).join('; ');
+  }
+  return String(raw);
 }
 
 // ---------------------------------------------------------------------
@@ -682,7 +696,7 @@ async function startGame(gameId, parentSignal) {
   const state = {
     id: gameId, engine, abortController: ac,
     myColor: null, opponent: null, movesPlayed: [], status: 'started',
-    lastClock: null,
+    lastClock: null, lastEval: null,
   };
   activeGames.set(gameId, state);
   renderGameList();
@@ -791,9 +805,13 @@ async function handleGameState(state, gs, gameChess) {
   const origOnInfo = state.engine.onInfo;
   state.engine.onInfo = (line) => {
     origOnInfo?.(line);
-    if (selectedGameId !== state.id) return;
     const m = line.match(/depth (\d+).*?score cp (-?\d+).*?nodes (\d+).*?nps (\d+).*?time (\d+)/);
-    if (m) pushTelemetry(+m[1], +m[2], +m[3], +m[4], +m[5]);
+    if (m) {
+      // Kept on the game state (not just pushed to the on-screen sparkline) so chat
+      // commands like "!eval" can report it even when this game isn't the selected one.
+      state.lastEval = { depth: +m[1], scoreCp: +m[2], nodes: +m[3], nps: +m[4], timeMs: +m[5] };
+      if (selectedGameId === state.id) pushTelemetry(+m[1], +m[2], +m[3], +m[4], +m[5]);
+    }
   };
 
   let result;
@@ -875,6 +893,7 @@ async function handleChatCommand(state, ev, gameChess) {
     opponent: state.opponent?.id || state.opponent?.name,
     movesPlayed: state.movesPlayed.slice(),
     chess: gameChess,
+    eval: state.lastEval,
     log: (msg) => log(`[chat cmd ${state.id}] ${msg}`),
   };
   let reply;
@@ -1012,6 +1031,140 @@ function toggleTimeModeUi() {
 }
 document.getElementById('time-mode').addEventListener('change', toggleTimeModeUi);
 toggleTimeModeUi();
+
+// ---------------------------------------------------------------------
+// Time management presets (built-in + user-saved)
+// ---------------------------------------------------------------------
+
+// Reasonable starting points for each speed class, not tuned for any particular engine —
+// treat them as a base to nudge from rather than an exact answer. All use dynamic mode.
+const BUILTIN_TIME_PRESETS = {
+  'Blitz, with increment': { estMovesLeft: 40, incrementWeight: 0.8, maxFractionOfRemaining: 0.05, minMoveMs: 200, maxMoveMs: 8000, overheadMs: 200, dynamicMaxDepth: 30 },
+  'Blitz, no increment': { estMovesLeft: 40, incrementWeight: 0, maxFractionOfRemaining: 0.04, minMoveMs: 150, maxMoveMs: 6000, overheadMs: 200, dynamicMaxDepth: 30 },
+  'Bullet': { estMovesLeft: 40, incrementWeight: 0.5, maxFractionOfRemaining: 0.03, minMoveMs: 50, maxMoveMs: 1500, overheadMs: 100, dynamicMaxDepth: 20 },
+  'Rapid, no increment': { estMovesLeft: 40, incrementWeight: 0, maxFractionOfRemaining: 0.06, minMoveMs: 500, maxMoveMs: 15000, overheadMs: 300, dynamicMaxDepth: 40 },
+};
+
+// Maps every bound time.* field to its input element id, so a preset can be dropped
+// straight into settings.time and the inputs resynced in one place.
+const TIME_FIELD_IDS = {
+  mode: 'time-mode',
+  staticDepth: 'static-depth',
+  staticSafetyMs: 'static-safety-ms',
+  estMovesLeft: 'dynamic-est-moves',
+  incrementWeight: 'dynamic-inc-weight',
+  maxFractionOfRemaining: 'dynamic-max-frac',
+  minMoveMs: 'dynamic-min-ms',
+  maxMoveMs: 'dynamic-max-ms',
+  overheadMs: 'dynamic-overhead-ms',
+  dynamicMaxDepth: 'dynamic-max-depth',
+};
+
+let timePresets = loadJSON('timePresets', {}); // name -> saved settings.time snapshot
+
+function refreshTimeInputsFromSettings() {
+  for (const [key, id] of Object.entries(TIME_FIELD_IDS)) {
+    const el = document.getElementById(id);
+    if (el) el.value = settings.time[key];
+  }
+  toggleTimeModeUi();
+}
+
+function applyTimePreset(partial) {
+  settings.time = { ...settings.time, ...partial };
+  persistSettings();
+  refreshTimeInputsFromSettings();
+}
+
+function populateTimePresetSelect(selectValue) {
+  const sel = document.getElementById('time-preset-select');
+  const prev = selectValue !== undefined ? selectValue : sel.value;
+  const builtinOpts = Object.keys(BUILTIN_TIME_PRESETS)
+    .map((name) => `<option value="builtin:${name}">${name}</option>`).join('');
+  const savedNames = Object.keys(timePresets);
+  const savedOpts = savedNames
+    .map((name) => `<option value="saved:${name}">${name}</option>`).join('');
+  sel.innerHTML =
+    `<option value="">— select a preset —</option>` +
+    `<optgroup label="Built-in">${builtinOpts}</optgroup>` +
+    (savedNames.length ? `<optgroup label="Saved">${savedOpts}</optgroup>` : '');
+  sel.value = [...sel.options].some((o) => o.value === prev) ? prev : '';
+}
+populateTimePresetSelect();
+
+document.getElementById('time-preset-select').addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  const sep = val.indexOf(':');
+  const kind = val.slice(0, sep);
+  const name = val.slice(sep + 1);
+  if (kind === 'builtin' && BUILTIN_TIME_PRESETS[name]) {
+    applyTimePreset({ mode: 'dynamic', ...BUILTIN_TIME_PRESETS[name] });
+    log(`loaded built-in time preset "${name}"`, 'log-ok');
+  } else if (kind === 'saved' && timePresets[name]) {
+    applyTimePreset(timePresets[name]);
+    log(`loaded saved time preset "${name}"`, 'log-ok');
+  }
+});
+
+document.getElementById('time-preset-save-btn').addEventListener('click', () => {
+  const nameInput = document.getElementById('time-preset-name');
+  const name = nameInput.value.trim();
+  if (!name) { log('enter a name before saving a time preset', 'log-err'); return; }
+  timePresets[name] = { ...settings.time };
+  saveJSON('timePresets', timePresets);
+  populateTimePresetSelect(`saved:${name}`);
+  nameInput.value = '';
+  log(`saved current time settings as preset "${name}"`, 'log-ok');
+});
+
+document.getElementById('time-preset-delete-btn').addEventListener('click', () => {
+  const sel = document.getElementById('time-preset-select');
+  const val = sel.value;
+  if (!val.startsWith('saved:')) {
+    log('select one of your saved presets to delete it (built-in presets can\'t be removed)', 'log-err');
+    return;
+  }
+  const name = val.slice('saved:'.length);
+  delete timePresets[name];
+  saveJSON('timePresets', timePresets);
+  populateTimePresetSelect('');
+  log(`deleted saved time preset "${name}"`);
+});
+
+// ---------------------------------------------------------------------
+// Collapsible panels
+// ---------------------------------------------------------------------
+
+for (const panel of document.querySelectorAll('.panel[data-collapse-key]')) {
+  const key = panel.dataset.collapseKey;
+  const header = panel.querySelector('h2');
+  if (!header) continue;
+
+  const chevron = document.createElement('span');
+  chevron.className = 'panel-chevron';
+  chevron.textContent = '▸';
+  header.prepend(chevron);
+
+  const body = document.createElement('div');
+  body.className = 'panel-body';
+  for (const child of [...panel.children]) {
+    if (child === header) continue;
+    body.appendChild(child);
+  }
+  panel.appendChild(body);
+
+  function setCollapsed(collapsed) {
+    panel.classList.toggle('collapsed', collapsed);
+    saveJSON(`panelCollapsed:${key}`, collapsed);
+  }
+  setCollapsed(!!loadJSON(`panelCollapsed:${key}`, false));
+
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('button, a, input, select, textarea, .info-icon')) return;
+    setCollapsed(!panel.classList.contains('collapsed'));
+  });
+}
 
 bindSelect('autoqueue-mode', 'autoQueue.mode');
 populateTimeControlSelect();
