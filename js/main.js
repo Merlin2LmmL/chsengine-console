@@ -31,9 +31,20 @@ const DEFAULT_SETTINGS = {
   chat: {
     motdEnabled: false,
     motd: '',
-    commandsEnabled: false,
+    commandsEnabled: true,
     commandPrefix: '!',
-    commandsCode: '',
+    // Fresh installs get a working example out of the box (matches the textarea's
+    // placeholder). Existing users who already saved an empty commandsCode keep
+    // whatever they saved — this default only applies the first time settings load.
+    commandsCode: `function handleCommand(cmd, args, ctx) {
+  if (cmd === 'eval') {
+    if (!ctx.eval) return "haven't finished a search yet";
+    const pawns = (ctx.eval.scoreCp / 100).toFixed(2);
+    return \`eval: \${pawns} (depth \${ctx.eval.depth}, from \${ctx.color} to move)\`;
+  }
+  if (cmd === 'rating') return 'no clue, ask lichess';
+  return null; // no reply
+}`,
   },
   display: {
     clockTenths: true,
@@ -120,6 +131,7 @@ function saveGameToHistory(state, gs) {
   gameHistory.unshift({
     gameId: state.id,
     opponent: state.opponent?.id || state.opponent?.name || null,
+    opponentRating: state.opponent?.rating ?? null,
     myColor: state.myColor,
     rated: !!state.rated,
     speed: state.speed || null,
@@ -138,6 +150,11 @@ function saveGameToHistory(state, gs) {
   if (gameHistory.length > MAX_HISTORY_GAMES) gameHistory.length = MAX_HISTORY_GAMES;
   persistGameHistory();
   renderGameHistory();
+  // Explicit confirmation in the log, separate from the win/loss/draw line above — if a
+  // game finishes and this line never appears, saveGameToHistory itself wasn't reached
+  // (e.g. the game ended before the stream saw a final status), which narrows down any
+  // future "games aren't showing up in history" report to before vs. after this point.
+  log(`saved game ${state.id} to history (${state.moveLog.length} ply, now ${gameHistory.length} game(s) recorded)`, 'log-ok');
 }
 
 function downloadJSON(filename, data) {
@@ -167,26 +184,40 @@ function renderGameHistory() {
     return;
   }
   for (const entry of gameHistory) {
-    const row = document.createElement('div');
-    row.className = 'history-row';
-    const resultClass = entry.outcome === 'win' ? 'stat-win'
-      : entry.outcome === 'loss' ? 'stat-loss'
-      : entry.outcome === 'unknown' ? 'stat-unknown'
-      : 'dim';
-    const evalCount = entry.moves.filter((m) => m.botEval).length;
-    row.innerHTML = `
-      <div class="history-meta">
-        <div><strong class="${resultClass}">${entry.outcome.toUpperCase()}</strong>
-          vs ${entry.opponent || '?'} (${entry.myColor || '?'})</div>
-        <div class="dim">${entry.speed || '?'}${entry.rated ? ' · rated' : ' · casual'} · ${entry.moves.length} plies
-          (${evalCount} with bot eval) · ${fmtHistoryDate(entry.endedAt)}</div>
-        <div class="dim history-reason">${entry.reason || describeGameEndReason(entry.status)}</div>
-      </div>
-      <button class="btn-tiny history-export-btn">export</button>`;
-    row.querySelector('.history-export-btn').addEventListener('click', () => {
-      downloadJSON(`chsengine-game-${entry.gameId}.json`, entry);
-    });
-    historyListEl.appendChild(row);
+    // Guard each entry independently: previously, one malformed/older-schema entry
+    // (e.g. missing `moves`) threw partway through the loop and silently left the
+    // *entire* list empty — every game after the bad one never got appended, which
+    // looked exactly like "history is empty" even though gameHistory had data in it.
+    try {
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      const resultClass = entry.outcome === 'win' ? 'stat-win'
+        : entry.outcome === 'loss' ? 'stat-loss'
+        : entry.outcome === 'unknown' ? 'stat-unknown'
+        : 'dim';
+      const moves = entry.moves || [];
+      const evalCount = moves.filter((m) => m.botEval).length;
+      const ratingStr = entry.opponentRating != null ? ` (${entry.opponentRating})` : '';
+      row.innerHTML = `
+        <div class="history-meta">
+          <div><strong class="${resultClass}">${entry.outcome.toUpperCase()}</strong>
+            vs ${entry.opponent || '?'}${ratingStr} (${entry.myColor || '?'})</div>
+          <div class="dim">${entry.speed || '?'}${entry.rated ? ' · rated' : ' · casual'} · ${moves.length} plies
+            (${evalCount} with bot eval) · ${fmtHistoryDate(entry.endedAt)}</div>
+          <div class="dim history-reason">${entry.reason || describeGameEndReason(entry.status)}</div>
+        </div>
+        <button class="btn-tiny history-export-btn">export</button>`;
+      row.querySelector('.history-export-btn').addEventListener('click', () => {
+        downloadJSON(`chsengine-game-${entry.gameId}.json`, entry);
+      });
+      historyListEl.appendChild(row);
+    } catch (e) {
+      console.error('failed to render history entry', entry, e);
+      const errRow = document.createElement('div');
+      errRow.className = 'dim history-row';
+      errRow.textContent = `(couldn't render one history entry — see console)`;
+      historyListEl.appendChild(errRow);
+    }
   }
 }
 renderGameHistory();
@@ -881,7 +912,8 @@ async function startGame(gameId, parentSignal) {
         state.opponent = state.myColor === 'white' ? ev.black : ev.white;
         state.rated = ev.rated;
         state.speed = ev.speed;
-        log(`game ${gameId} started vs ${state.opponent?.id || state.opponent?.name || 'anonymous'} (${state.myColor}, ${ev.speed}${ev.rated ? ' rated' : ' casual'})`, 'log-ok');
+        const oppRatingStr = state.opponent?.rating != null ? ` (${state.opponent.rating})` : '';
+        log(`game ${gameId} started vs ${state.opponent?.id || state.opponent?.name || 'anonymous'}${oppRatingStr} (${state.myColor}, ${ev.speed}${ev.rated ? ' rated' : ' casual'})`, 'log-ok');
         if (settings.chat.motdEnabled && settings.chat.motd.trim() && !state.motdSent) {
           state.motdSent = true;
           // Lichess chat messages max out around 140 chars; trim defensively so an
@@ -1077,14 +1109,27 @@ function compileCommandHandler(code) {
 }
 
 async function handleChatCommand(state, ev, gameChess) {
-  if (!settings.chat.commandsEnabled) return;
   const prefix = settings.chat.commandPrefix || '!';
   const text = (ev.text || '').trim();
-  if (!text.startsWith(prefix)) return;
-  if (!compiledCommandHandler) {
-    if (compiledCommandError) log('chat command ignored: handler has a compile error, see above', 'log-err');
+  if (!text.startsWith(prefix)) return; // not something meant as a command, stay quiet
+
+  // Everything below only runs once a line actually looks like a command attempt, so
+  // these checks can log loudly without spamming the log for ordinary chat banter —
+  // previously each of these bailed out silently, which is exactly why a "!eval" or
+  // "!rating" line in-game produced no error and no reply: nothing was actually wrong,
+  // there was just nothing configured to respond to it yet.
+  if (!settings.chat.commandsEnabled) {
+    log(`ignored "${text}" — custom chat commands are off (Chat panel → "Enable custom chat commands")`, 'log-err');
     return;
   }
+  if (!compiledCommandHandler) {
+    log(compiledCommandError
+      ? `ignored "${text}" — command handler has a compile error (see the message logged when it was saved/tested)`
+      : `ignored "${text}" — no command handler code has been saved yet (Chat panel → paste code into "Command handler (JS)" → Test compile)`,
+      'log-err');
+    return;
+  }
+
   const [rawCmd, ...args] = text.slice(prefix.length).trim().split(/\s+/);
   const cmd = (rawCmd || '').toLowerCase();
   const ctx = {
@@ -1104,8 +1149,12 @@ async function handleChatCommand(state, ev, gameChess) {
     return;
   }
   if (typeof reply === 'string' && reply.trim()) {
-    try { await client.chat(state.id, ev.room || 'player', reply); }
-    catch (e) { log('failed to send chat reply: ' + errDetail(e), 'log-err'); }
+    try {
+      await client.chat(state.id, ev.room || 'player', reply);
+      log(`replied to "${text}" with "${reply}"`, 'log-ok');
+    } catch (e) { log('failed to send chat reply: ' + errDetail(e), 'log-err'); }
+  } else {
+    log(`"${text}" handled (handleCommand returned no reply)`);
   }
 }
 
@@ -1130,7 +1179,8 @@ function renderGameList() {
     const row = document.createElement('div');
     row.className = 'game-row' + (id === selectedGameId ? ' selected' : '');
     const opp = state.opponent?.id || state.opponent?.name || 'connecting…';
-    row.textContent = `${id.slice(0, 8)} · vs ${opp} · ${state.myColor || '?'}`;
+    const oppRating = state.opponent?.rating != null ? ` (${state.opponent.rating})` : '';
+    row.textContent = `${id.slice(0, 8)} · vs ${opp}${oppRating} · ${state.myColor || '?'}`;
     row.addEventListener('click', () => selectGame(id));
     gameListEl.appendChild(row);
   }
@@ -1159,8 +1209,9 @@ function fmtClock(ms) {
 function updateGameInfoPanel(state) {
   const gs = state.lastClock;
   const opp = state.opponent?.id || state.opponent?.name || '—';
+  const oppRating = state.opponent?.rating != null ? ` (${state.opponent.rating})` : '';
   gameInfoEl.innerHTML = `
-    <div><strong>vs ${opp}</strong> (${state.speed || '?'}${state.rated ? ', rated' : ', casual'})</div>
+    <div><strong>vs ${opp}${oppRating}</strong> (${state.speed || '?'}${state.rated ? ', rated' : ', casual'})</div>
     <div>playing: ${state.myColor || '?'} · status: ${state.status}</div>
     <div>clock — white ${fmtClock(gs?.wtime)} · black ${fmtClock(gs?.btime)}</div>
   `;
