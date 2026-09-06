@@ -20,11 +20,20 @@ const DEFAULT_SETTINGS = {
     enabled: false,
     mode: 'open', // 'open' | 'targets' | 'bots'
     targets: '',
-    clockLimitSec: 300,
-    clockIncrementSec: 3,
+    timeControl: '5+3', // label into TIME_PRESETS
     rated: false,
     intervalSec: 45,
     botsPerAttempt: 3,
+    botRatingMin: 0,
+    botRatingMax: 3500,
+    botCooldowns: {}, // username(lowercase) -> ISO date string to skip until
+  },
+  chat: {
+    motdEnabled: false,
+    motd: '',
+    commandsEnabled: false,
+    commandPrefix: '!',
+    commandsCode: '',
   },
   display: {
     clockTenths: true,
@@ -438,8 +447,92 @@ let queueInFlight = false;
 const RECENT_CHALLENGE_COOLDOWN_MS = 10 * 60 * 1000;
 const recentlyChallenged = new Map(); // username(lowercase) -> timestamp last tried
 
-function fmtClockSetting(aq) {
-  return `${Math.round(aq.clockLimitSec / 60)}+${aq.clockIncrementSec}`;
+// Real-time presets use {limit, inc} in seconds; the correspondence preset uses
+// {days} instead, since that's what Lichess's challenge API expects for it (no
+// clock.limit/clock.increment at all). `speed` is the exact Lichess perf key
+// (matches what /api/bot/online returns per bot under `perfs`), used both for
+// display and for the bot-rating-range filter below.
+const TIME_PRESETS = [
+  { label: '15s+0', limit: 15, inc: 0, speed: 'ultraBullet' },
+  { label: '30s+0', limit: 30, inc: 0, speed: 'ultraBullet' },
+  { label: '1+0', limit: 60, inc: 0, speed: 'bullet' },
+  { label: '1+1', limit: 60, inc: 1, speed: 'bullet' },
+  { label: '2+1', limit: 120, inc: 1, speed: 'bullet' },
+  { label: '3+0', limit: 180, inc: 0, speed: 'blitz' },
+  { label: '3+1', limit: 180, inc: 1, speed: 'blitz' },
+  { label: '3+2', limit: 180, inc: 2, speed: 'blitz' },
+  { label: '5+0', limit: 300, inc: 0, speed: 'blitz' },
+  { label: '5+3', limit: 300, inc: 3, speed: 'blitz' },
+  { label: '10+0', limit: 600, inc: 0, speed: 'rapid' },
+  { label: '10+5', limit: 600, inc: 5, speed: 'rapid' },
+  { label: '15+10', limit: 900, inc: 10, speed: 'rapid' },
+  { label: '30+0', limit: 1800, inc: 0, speed: 'classical' },
+  { label: '30+20', limit: 1800, inc: 20, speed: 'classical' },
+  { label: 'Correspondence (2 days/move)', days: 2, speed: 'correspondence' },
+];
+
+function humanSpeed(speed) { return speed === 'ultraBullet' ? 'UltraBullet' : speed[0].toUpperCase() + speed.slice(1); }
+
+function populateTimeControlSelect() {
+  const sel = document.getElementById('autoqueue-timecontrol');
+  sel.innerHTML = TIME_PRESETS.map((p) => `<option value="${p.label}">${p.label} (${humanSpeed(p.speed)})</option>`).join('');
+}
+
+function getSelectedPreset() {
+  return TIME_PRESETS.find((p) => p.label === settings.autoQueue.timeControl) || TIME_PRESETS[0];
+}
+
+/** {clockLimit, clockIncrement} or {days}, whichever the selected preset needs. */
+function buildClockParams() {
+  const preset = getSelectedPreset();
+  return preset.days != null
+    ? { days: preset.days }
+    : { clockLimit: preset.limit, clockIncrement: preset.inc };
+}
+
+// Heuristic for "this bot has hit its games-for-today cap" style rejections. Lichess's
+// actual wording (confirmed from a live 400): "<name> played 100 games against other
+// bots today, please wait until <ISO timestamp> to challenge them." — it hands back the
+// exact resume time, so we parse that out and use it directly; the pattern list and the
+// UTC-midnight fallback only matter if a differently-worded variant shows up.
+const GAME_LIMIT_ERROR_PATTERNS = [
+  /played \d+ games against other bots today/i,
+  /too many games/i, /game limit/i, /maximum number of games/i,
+  /daily limit/i, /already has too many/i, /reached.*limit/i,
+];
+function looksLikeGameLimitError(msg) {
+  return GAME_LIMIT_ERROR_PATTERNS.some((re) => re.test(msg));
+}
+function extractCooldownUntil(msg) {
+  const m = msg.match(/wait until (\S+?)(?:\s+to\b|[)\s]|$)/i);
+  if (m && !isNaN(Date.parse(m[1]))) return new Date(m[1]).toISOString();
+  return nextUtcMidnightIso(); // fallback if the message doesn't match this shape
+}
+function nextUtcMidnightIso() {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toISOString();
+}
+function isBotCoolingDown(name) {
+  const key = name.toLowerCase();
+  const until = settings.autoQueue.botCooldowns[key];
+  if (!until) return false;
+  if (Date.now() >= Date.parse(until)) { delete settings.autoQueue.botCooldowns[key]; persistSettings(); return false; }
+  return true;
+}
+function cooldownBot(name, reason) {
+  const until = extractCooldownUntil(reason);
+  settings.autoQueue.botCooldowns[name.toLowerCase()] = until;
+  persistSettings();
+  renderBotCooldowns();
+  log(`auto-queue: bot ${name} looks maxed out for today (${reason}) — skipping until ${until}`, 'log-err');
+}
+function renderBotCooldowns() {
+  const el = document.getElementById('bot-cooldowns-display');
+  if (!el) return;
+  const entries = Object.entries(settings.autoQueue.botCooldowns || {});
+  el.textContent = entries.length
+    ? 'On cooldown: ' + entries.map(([n, until]) => `${n} (until ${new Date(until).toLocaleString()})`).join(', ')
+    : '';
 }
 
 function isRecentlyChallenged(name) {
@@ -470,14 +563,11 @@ async function queueOnce(reason = 'manual') {
 
   queueInFlight = true;
   const aq = settings.autoQueue;
+  const preset = getSelectedPreset();
   // Variant is always "standard" — same limitation as incoming-challenge filtering:
   // the board renderer and engine bundle only understand plain chess rules.
-  const params = {
-    clockLimit: aq.clockLimitSec,
-    clockIncrement: aq.clockIncrementSec,
-    rated: aq.rated,
-    variant: 'standard',
-  };
+  const params = { ...buildClockParams(), rated: aq.rated, variant: 'standard' };
+  const label = `${preset.label}${aq.rated ? ' rated' : ' casual'}`;
   try {
     if (aq.mode === 'targets') {
       const names = aq.targets.split(',').map((s) => s.trim()).filter(Boolean);
@@ -486,7 +576,7 @@ async function queueOnce(reason = 'manual') {
         if (activeGames.size >= settings.matchmaking.maxConcurrentGames) break;
         try {
           await client.challengeUser(name, params);
-          log(`queued (${reason}): challenged ${name} — ${fmtClockSetting(aq)}${aq.rated ? ' rated' : ' casual'}`, 'log-ok');
+          log(`queued (${reason}): challenged ${name} — ${label}`, 'log-ok');
         } catch (e) {
           log(`auto-queue: failed to challenge ${name}: ${errDetail(e)}`, 'log-err');
         }
@@ -501,29 +591,33 @@ async function queueOnce(reason = 'manual') {
       }
       const candidates = shuffleInPlace(
         bots
-          .map((b) => b.username || b.id)
-          .filter((name) => name && name.toLowerCase() !== myUsername?.toLowerCase())
-          .filter((name) => !isRecentlyChallenged(name))
+          .map((b) => ({ name: b.username || b.id, rating: b.perfs?.[preset.speed]?.rating }))
+          .filter((b) => b.name && b.name.toLowerCase() !== myUsername?.toLowerCase())
+          .filter((b) => !isRecentlyChallenged(b.name))
+          .filter((b) => !isBotCoolingDown(b.name))
+          .filter((b) => b.rating != null && b.rating >= aq.botRatingMin && b.rating <= aq.botRatingMax)
       );
       if (!candidates.length) {
-        log('auto-queue: no eligible online bots right now (none online, or all tried recently)');
+        log(`auto-queue: no eligible online bots right now (none online in ${aq.botRatingMin}-${aq.botRatingMax} ${humanSpeed(preset.speed)}, or all tried recently / on cooldown)`);
         return;
       }
       const picks = candidates.slice(0, Math.max(1, aq.botsPerAttempt));
-      for (const name of picks) {
+      for (const { name } of picks) {
         if (activeGames.size >= settings.matchmaking.maxConcurrentGames) break;
         markRecentlyChallenged(name);
         try {
           await client.challengeUser(name, params);
-          log(`queued (${reason}): challenged bot ${name} — ${fmtClockSetting(aq)}${aq.rated ? ' rated' : ' casual'}`, 'log-ok');
+          log(`queued (${reason}): challenged bot ${name} — ${label}`, 'log-ok');
         } catch (e) {
-          log(`auto-queue: failed to challenge bot ${name}: ${errDetail(e)}`, 'log-err');
+          const msg = errDetail(e);
+          if (looksLikeGameLimitError(msg)) cooldownBot(name, msg);
+          else log(`auto-queue: failed to challenge bot ${name}: ${msg}`, 'log-err');
         }
       }
     } else {
       const resp = await client.createOpenChallenge(params);
       const url = resp?.challenge?.url || resp?.url || '';
-      log(`queued (${reason}): posted open challenge${url ? ' — ' + url : ''} — ${fmtClockSetting(aq)}${aq.rated ? ' rated' : ' casual'}`, 'log-ok');
+      log(`queued (${reason}): posted open challenge${url ? ' — ' + url : ''} — ${label}`, 'log-ok');
     }
   } catch (e) {
     log(`auto-queue attempt failed: ${errDetail(e)}`, 'log-err');
@@ -616,11 +710,19 @@ async function startGame(gameId, parentSignal) {
         state.rated = ev.rated;
         state.speed = ev.speed;
         log(`game ${gameId} started vs ${state.opponent?.id || state.opponent?.name || 'anonymous'} (${state.myColor}, ${ev.speed}${ev.rated ? ' rated' : ' casual'})`, 'log-ok');
+        if (settings.chat.motdEnabled && settings.chat.motd.trim() && !state.motdSent) {
+          state.motdSent = true;
+          try { await client.chat(gameId, 'player', settings.chat.motd.trim()); }
+          catch (e) { log('failed to send message of the day: ' + errDetail(e), 'log-err'); }
+        }
         await handleGameState(state, ev.state, gameChess);
       } else if (ev.type === 'gameState') {
         await handleGameState(state, ev, gameChess);
       } else if (ev.type === 'chatLine') {
-        if (ev.username?.toLowerCase() !== myUsername?.toLowerCase()) log(`[chat ${gameId}] ${ev.username}: ${ev.text}`);
+        if (ev.username?.toLowerCase() !== myUsername?.toLowerCase()) {
+          log(`[chat ${gameId}] ${ev.username}: ${ev.text}`);
+          await handleChatCommand(state, ev, gameChess);
+        }
       } else if (ev.type === 'opponentGone') {
         if (ev.gone) log(`opponent left game ${gameId}, can claim win in ${ev.claimWinInSeconds}s`);
       }
@@ -729,6 +831,63 @@ function isLegalUciMove(chess, uci) {
   const promotion = uci.slice(4, 5) || undefined;
   const legal = chess.moves({ verbose: true });
   return legal.some((m) => m.from === from && m.to === to && (!promotion || m.promotion === promotion));
+}
+
+// ---------------------------------------------------------------------
+// Chat: message of the day + custom commands
+// ---------------------------------------------------------------------
+
+let compiledCommandHandler = null;
+let compiledCommandError = null;
+
+/** Compiles user-supplied JS that must define `function handleCommand(cmd, args, ctx)`.
+ * Runs as plain JS in this page's own context, no sandboxing — that's the deal the user
+ * signed up for by pasting code into this field. */
+function compileCommandHandler(code) {
+  compiledCommandHandler = null;
+  compiledCommandError = null;
+  if (!code || !code.trim()) return;
+  try {
+    const factory = new Function(
+      `${code}\nif (typeof handleCommand !== 'function') throw new Error('no function named handleCommand was defined');\nreturn handleCommand;`
+    );
+    compiledCommandHandler = factory();
+  } catch (e) {
+    compiledCommandError = e.message;
+    log('chat command handler failed to compile: ' + e.message, 'log-err');
+  }
+}
+
+async function handleChatCommand(state, ev, gameChess) {
+  if (!settings.chat.commandsEnabled) return;
+  const prefix = settings.chat.commandPrefix || '!';
+  const text = (ev.text || '').trim();
+  if (!text.startsWith(prefix)) return;
+  if (!compiledCommandHandler) {
+    if (compiledCommandError) log('chat command ignored: handler has a compile error, see above', 'log-err');
+    return;
+  }
+  const [rawCmd, ...args] = text.slice(prefix.length).trim().split(/\s+/);
+  const cmd = (rawCmd || '').toLowerCase();
+  const ctx = {
+    gameId: state.id,
+    color: state.myColor,
+    opponent: state.opponent?.id || state.opponent?.name,
+    movesPlayed: state.movesPlayed.slice(),
+    chess: gameChess,
+    log: (msg) => log(`[chat cmd ${state.id}] ${msg}`),
+  };
+  let reply;
+  try {
+    reply = await compiledCommandHandler(cmd, args, ctx);
+  } catch (e) {
+    log(`chat command handler threw for "${cmd}": ${e.message}`, 'log-err');
+    return;
+  }
+  if (typeof reply === 'string' && reply.trim()) {
+    try { await client.chat(state.id, ev.room || 'player', reply); }
+    catch (e) { log('failed to send chat reply: ' + errDetail(e), 'log-err'); }
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -855,10 +1014,13 @@ document.getElementById('time-mode').addEventListener('change', toggleTimeModeUi
 toggleTimeModeUi();
 
 bindSelect('autoqueue-mode', 'autoQueue.mode');
-bindNumber('autoqueue-clock-limit', 'autoQueue.clockLimitSec');
-bindNumber('autoqueue-clock-increment', 'autoQueue.clockIncrementSec');
+populateTimeControlSelect();
+bindSelect('autoqueue-timecontrol', 'autoQueue.timeControl');
 bindCheckbox('autoqueue-rated', 'autoQueue.rated');
 bindNumber('autoqueue-bots-per-attempt', 'autoQueue.botsPerAttempt');
+bindNumber('autoqueue-bot-rating-min', 'autoQueue.botRatingMin');
+bindNumber('autoqueue-bot-rating-max', 'autoQueue.botRatingMax');
+renderBotCooldowns();
 
 const autoQueueTargetsInput = document.getElementById('autoqueue-targets');
 autoQueueTargetsInput.value = settings.autoQueue.targets;
@@ -893,5 +1055,32 @@ function toggleAutoQueueUi() {
 }
 document.getElementById('autoqueue-mode').addEventListener('change', toggleAutoQueueUi);
 toggleAutoQueueUi();
+
+bindCheckbox('chat-motd-enabled', 'chat.motdEnabled');
+const chatMotdInput = document.getElementById('chat-motd');
+chatMotdInput.value = settings.chat.motd;
+chatMotdInput.addEventListener('change', () => { settings.chat.motd = chatMotdInput.value; persistSettings(); });
+
+bindCheckbox('chat-commands-enabled', 'chat.commandsEnabled');
+const chatPrefixInput = document.getElementById('chat-command-prefix');
+chatPrefixInput.value = settings.chat.commandPrefix;
+chatPrefixInput.addEventListener('change', () => {
+  settings.chat.commandPrefix = chatPrefixInput.value.trim() || '!';
+  chatPrefixInput.value = settings.chat.commandPrefix;
+  persistSettings();
+});
+
+const chatCodeInput = document.getElementById('chat-commands-code');
+chatCodeInput.value = settings.chat.commandsCode;
+chatCodeInput.addEventListener('change', () => {
+  settings.chat.commandsCode = chatCodeInput.value;
+  persistSettings();
+  compileCommandHandler(chatCodeInput.value);
+});
+document.getElementById('chat-test-compile-btn').addEventListener('click', () => {
+  compileCommandHandler(chatCodeInput.value);
+  if (!compiledCommandError) log('chat command handler compiled OK', 'log-ok');
+});
+compileCommandHandler(settings.chat.commandsCode); // whatever was saved from last session
 
 log('console ready. load an engine bundle and connect to begin.');

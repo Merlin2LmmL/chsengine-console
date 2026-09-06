@@ -129,15 +129,21 @@ export class LichessClient {
     });
   }
 
+  /** Build the clock/days form fields shared by open + direct challenges.
+   * Pass either {clockLimit, clockIncrement} (real-time) or {days} (correspondence). */
+  _clockParams({ clockLimit, clockIncrement, days }) {
+    if (days != null) return { days: String(days) };
+    return { 'clock.limit': String(clockLimit), 'clock.increment': String(clockIncrement) };
+  }
+
   /** Post an open challenge (anyone with the link can accept). Returns the parsed JSON body. */
-  async createOpenChallenge({ clockLimit, clockIncrement, rated = false, variant = 'standard' }) {
+  async createOpenChallenge({ clockLimit, clockIncrement, days, rated = false, variant = 'standard' }) {
     const res = await this._fetch('/api/challenge/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         rated: String(!!rated),
-        'clock.limit': String(clockLimit),
-        'clock.increment': String(clockIncrement),
+        ...this._clockParams({ clockLimit, clockIncrement, days }),
         variant,
       }),
     });
@@ -145,14 +151,13 @@ export class LichessClient {
   }
 
   /** Challenge a specific username directly. Returns the parsed JSON body. */
-  async challengeUser(username, { clockLimit, clockIncrement, rated = false, variant = 'standard' }) {
+  async challengeUser(username, { clockLimit, clockIncrement, days, rated = false, variant = 'standard' }) {
     const res = await this._fetch(`/api/challenge/${username}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         rated: String(!!rated),
-        'clock.limit': String(clockLimit),
-        'clock.increment': String(clockIncrement),
+        ...this._clockParams({ clockLimit, clockIncrement, days }),
         variant,
       }),
     });

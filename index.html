@@ -96,6 +96,8 @@
 
     <div class="panel">
       <h2>Matchmaking</h2>
+
+      <h3>Accepting challenges</h3>
       <label class="field checkbox"><input id="auto-accept" type="checkbox"><span>Auto-accept matching challenges</span></label>
       <label class="field">
         <span>Rated filter</span>
@@ -113,11 +115,9 @@
         <label class="field checkbox"><input id="speed-classical" type="checkbox"><span>Classical</span></label>
         <label class="field checkbox"><input id="speed-correspondence" type="checkbox"><span>Correspondence</span></label>
       </div>
-      <p class="hint">Only the "standard" variant is supported (the bundled engine's board logic doesn't handle chess variants).</p>
-    </div>
+      <p class="hint">Only the "standard" variant is supported (the bundled engine's board logic doesn't handle chess variants). "Max concurrent games" also gates auto-queue below.</p>
 
-    <div class="panel">
-      <h2>Auto-queue</h2>
+      <h3>Auto-queue</h3>
       <label class="field checkbox"><input id="autoqueue-enabled" type="checkbox"><span>Auto-queue (on connect + after each game)</span></label>
       <label class="field">
         <span>Queue mode</span>
@@ -127,6 +127,10 @@
           <option value="bots">Challenge online bots</option>
         </select>
       </label>
+      <label class="field">
+        <span>Time control</span>
+        <select id="autoqueue-timecontrol"></select>
+      </label>
       <div id="autoqueue-targets-group" class="subgroup">
         <label class="field-block">
           <span>Usernames (comma-separated)</span>
@@ -135,14 +139,43 @@
       </div>
       <div id="autoqueue-bots-group" class="subgroup">
         <label class="field"><span>Bots to challenge per attempt</span><input id="autoqueue-bots-per-attempt" type="number" min="1" max="20" step="1"></label>
-        <p class="hint">Pulls the live list of currently-online bot accounts from Lichess and challenges a random sample each attempt, skipping anyone challenged in the last 10 minutes.</p>
+        <label class="field"><span>Min rating</span><input id="autoqueue-bot-rating-min" type="number" min="0" max="3500" step="10"></label>
+        <label class="field"><span>Max rating</span><input id="autoqueue-bot-rating-max" type="number" min="0" max="3500" step="10"></label>
+        <p class="hint">Rating checked is the bot's rating in the perf matching the time control above (e.g. "3+2" checks blitz rating). Bots with no recorded rating for that perf are skipped, not assumed in-range.</p>
+        <p class="hint">Pulls the live list of currently-online bot accounts from Lichess and challenges a random sample each attempt, skipping anyone challenged in the last 10 minutes or currently on cooldown.</p>
+        <div id="bot-cooldowns-display" class="dim"></div>
       </div>
-      <label class="field"><span>Clock limit (sec)</span><input id="autoqueue-clock-limit" type="number" min="0" max="10800" step="15"></label>
-      <label class="field"><span>Clock increment (sec)</span><input id="autoqueue-clock-increment" type="number" min="0" max="180" step="1"></label>
       <label class="field checkbox"><input id="autoqueue-rated" type="checkbox"><span>Rated</span></label>
       <label class="field"><span>Retry interval (sec)</span><input id="autoqueue-interval" type="number" min="5" max="600" step="5"></label>
       <button id="queue-now-btn" class="btn-small">Queue now</button>
       <p class="hint">Only posts "standard" variant challenges — same limitation as above. Retries on an interval whenever below "Max concurrent games", and fires once right after each game you finish.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Chat</h2>
+      <label class="field checkbox"><input id="chat-motd-enabled" type="checkbox"><span>Send a message when a game starts</span></label>
+      <label class="field-block">
+        <span>Message of the day</span>
+        <input id="chat-motd" type="text" placeholder="gl hf!">
+      </label>
+      <label class="field checkbox"><input id="chat-commands-enabled" type="checkbox"><span>Enable custom chat commands</span></label>
+      <label class="field"><span>Command prefix</span><input id="chat-command-prefix" type="text" maxlength="3" style="width:3em"></label>
+      <label class="field-block">
+        <span>Command handler (JS)</span>
+        <textarea id="chat-commands-code" rows="10" spellcheck="false" placeholder="function handleCommand(cmd, args, ctx) {&#10;  if (cmd === 'rating') return 'no clue, ask lichess';&#10;  return null; // no reply&#10;}"></textarea>
+      </label>
+      <p class="hint">
+        Define <code>function handleCommand(cmd, args, ctx)</code>. It's called for every
+        opponent chat line starting with the prefix above (<code>cmd</code> lowercased,
+        <code>args</code> the rest split on whitespace). Return a string to send back as a
+        chat reply, or <code>null</code>/nothing to stay silent — it can also be
+        <code>async</code>. <code>ctx</code> gives you
+        <code>{ gameId, color, opponent, movesPlayed, chess, log }</code>, where
+        <code>chess</code> is the live chess.js instance for that game (read it, don't
+        mutate it). This runs as plain JS in your own browser tab with no sandboxing —
+        only paste code you trust.
+      </p>
+      <button id="chat-test-compile-btn" class="btn-small">Test compile</button>
     </div>
 
     <div class="panel log-panel">
