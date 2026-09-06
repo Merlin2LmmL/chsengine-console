@@ -53,6 +53,17 @@
       <h2>Record <button id="reset-stats-btn" class="btn-tiny">reset</button></h2>
       <div id="stats-display" class="stats-display"></div>
     </div>
+
+    <div class="panel" data-collapse-key="history">
+      <h2><span>Game history
+        <span class="info-icon" tabindex="0" data-tip="Keeps the last 50 finished games (win/loss/draw/aborted) with every move played and, for moves the bot itself made, the bot's own evaluation at that point. Export one game or the whole history as JSON to compare against Stockfish elsewhere.">?</span></span>
+        <span class="header-actions">
+          <button id="history-export-all-btn" class="btn-tiny">export all</button>
+          <button id="history-clear-btn" class="btn-tiny btn-danger">clear</button>
+        </span>
+      </h2>
+      <div id="history-list" class="history-list"></div>
+    </div>
   </section>
 
   <section class="col-right">

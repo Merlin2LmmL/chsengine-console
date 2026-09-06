@@ -67,6 +67,145 @@ const statsDisplayEl = document.getElementById('stats-display');
 
 function persistStats() { saveJSON('stats', stats); }
 
+// Lichess's `status` field (plus two synthetic statuses we generate ourselves below, for
+// when the console's own connection is what fails) doubles as the "why did this game end"
+// reason, and maps to a human-readable line shown in the history panel.
+const GAME_END_REASONS = {
+  mate: 'Checkmate',
+  resign: 'Resignation',
+  stalemate: 'Stalemate',
+  draw: 'Draw',
+  outoftime: 'Time forfeit (flag fell)',
+  timeout: 'Opponent abandoned the game',
+  cheat: 'Cheat detected',
+  variantEnd: 'Variant-specific ending',
+  noStart: "Game never started (one side didn't move in time)",
+  aborted: 'Aborted before it counted',
+  unknownFinish: 'Ended abnormally (Lichess reported "unknownFinish")',
+  connectionLost: "This console's connection dropped — the real result is unknown from here",
+  consoleDisconnected: 'You disconnected the console while this game was still running',
+};
+function describeGameEndReason(status) {
+  return GAME_END_REASONS[status] || status || 'unknown';
+}
+
+/** Shared by the win/loss/draw record and the history panel so the two can't disagree. */
+function computeOutcome(gs, myColor) {
+  if (gs.status === 'aborted' || gs.status === 'noStart') return 'aborted';
+  if (gs.status === 'connectionLost' || gs.status === 'consoleDisconnected') return 'unknown';
+  if (gs.winner === myColor) return 'win';
+  if (gs.winner) return 'loss';
+  return 'draw';
+}
+
+// ---------------------------------------------------------------------
+// Game history (per-move log, incl. the bot's own evaluations)
+// ---------------------------------------------------------------------
+//
+// Kept separately from `stats` above: this stores enough per-move detail (FEN before
+// each move, the move played, and the bot's own eval when it was the mover) to later
+// replay a game through Stockfish and compare move-by-move, per game, exportable as JSON.
+
+const MAX_HISTORY_GAMES = 50;
+let gameHistory = loadJSON('gameHistory', []); // newest first
+
+function persistGameHistory() { saveJSON('gameHistory', gameHistory); }
+
+/** Called once per finished game (any status, including aborted/connection-lost) with its
+ * final gameState — or, for the connection-lost/disconnected cases, a synthetic one. */
+function saveGameToHistory(state, gs) {
+  if (state.historySaved) return;
+  state.historySaved = true;
+  const outcome = computeOutcome(gs, state.myColor);
+  gameHistory.unshift({
+    gameId: state.id,
+    opponent: state.opponent?.id || state.opponent?.name || null,
+    myColor: state.myColor,
+    rated: !!state.rated,
+    speed: state.speed || null,
+    status: gs.status,
+    reason: describeGameEndReason(gs.status),
+    winner: gs.winner || null,
+    outcome,
+    startedAt: state.startedAt || null,
+    endedAt: new Date().toISOString(),
+    engine: bundle ? { name: bundle.manifest.name, version: bundle.manifest.version } : null,
+    evalNote: "botEval.scoreCp is read straight off the engine's own \"info ... score cp ...\" line, "
+      + 'from the perspective of the side to move at fenBefore (positive = good for the mover) — '
+      + 'the same convention most UCI engines, including Stockfish, use by default.',
+    moves: state.moveLog,
+  });
+  if (gameHistory.length > MAX_HISTORY_GAMES) gameHistory.length = MAX_HISTORY_GAMES;
+  persistGameHistory();
+  renderGameHistory();
+}
+
+function downloadJSON(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function fmtHistoryDate(iso) {
+  if (!iso) return '?';
+  try { return new Date(iso).toLocaleString(); } catch (_) { return iso; }
+}
+
+const historyListEl = document.getElementById('history-list');
+
+function renderGameHistory() {
+  if (!historyListEl) return;
+  historyListEl.innerHTML = '';
+  if (gameHistory.length === 0) {
+    historyListEl.innerHTML = '<div class="dim">No games recorded yet</div>';
+    return;
+  }
+  for (const entry of gameHistory) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    const resultClass = entry.outcome === 'win' ? 'stat-win'
+      : entry.outcome === 'loss' ? 'stat-loss'
+      : entry.outcome === 'unknown' ? 'stat-unknown'
+      : 'dim';
+    const evalCount = entry.moves.filter((m) => m.botEval).length;
+    row.innerHTML = `
+      <div class="history-meta">
+        <div><strong class="${resultClass}">${entry.outcome.toUpperCase()}</strong>
+          vs ${entry.opponent || '?'} (${entry.myColor || '?'})</div>
+        <div class="dim">${entry.speed || '?'}${entry.rated ? ' · rated' : ' · casual'} · ${entry.moves.length} plies
+          (${evalCount} with bot eval) · ${fmtHistoryDate(entry.endedAt)}</div>
+        <div class="dim history-reason">${entry.reason || describeGameEndReason(entry.status)}</div>
+      </div>
+      <button class="btn-tiny history-export-btn">export</button>`;
+    row.querySelector('.history-export-btn').addEventListener('click', () => {
+      downloadJSON(`chsengine-game-${entry.gameId}.json`, entry);
+    });
+    historyListEl.appendChild(row);
+  }
+}
+renderGameHistory();
+
+document.getElementById('history-export-all-btn')?.addEventListener('click', () => {
+  if (gameHistory.length === 0) { log('no games recorded yet to export', 'log-err'); return; }
+  downloadJSON(`chsengine-history-${Date.now()}.json`, gameHistory);
+  log(`exported ${gameHistory.length} game(s) from history`, 'log-ok');
+});
+
+document.getElementById('history-clear-btn')?.addEventListener('click', () => {
+  if (gameHistory.length === 0) return;
+  if (!window.confirm(`Delete all ${gameHistory.length} recorded game(s) from this browser? This can't be undone.`)) return;
+  gameHistory = [];
+  persistGameHistory();
+  renderGameHistory();
+  log('game history cleared');
+});
+
 function renderStats() {
   const total = stats.wins + stats.losses + stats.draws;
   const winRate = total ? ((stats.wins / total) * 100).toFixed(1) : '0.0';
@@ -91,12 +230,8 @@ document.getElementById('reset-stats-btn').addEventListener('click', () => {
 function recordGameResult(state, gs) {
   if (state.counted) return;
   state.counted = true;
-  if (gs.status === 'aborted' || gs.status === 'noStart') return; // not a completed game, don't count
-
-  let outcome;
-  if (gs.winner === state.myColor) outcome = 'win';
-  else if (gs.winner && gs.winner !== state.myColor) outcome = 'loss';
-  else outcome = 'draw';
+  const outcome = computeOutcome(gs, state.myColor);
+  if (outcome === 'aborted' || outcome === 'unknown') return; // not a completed game, don't count
 
   const key = { win: 'wins', loss: 'losses', draw: 'draws' }[outcome];
   stats[key]++;
@@ -683,6 +818,28 @@ function uciClockFields(gameState, myColor) {
   return { remainingMs, incrementMs };
 }
 
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+/** Sends the message-of-the-day with one short-delay retry. Chat right at game start is a
+ * known flaky spot for bots — Lichess sometimes hasn't fully wired up the chat room for a
+ * brand-new game in the same instant it sends gameFull, so an immediate POST can 400 even
+ * though everything about the request is otherwise correct. If it still fails after the
+ * retry, the real reason (via errDetail, which now decodes Lichess's structured error
+ * bodies instead of printing "[object Object]") gets logged for a definitive diagnosis. */
+async function sendMotdWithRetry(gameId, text) {
+  let lastErr;
+  for (const delayMs of [0, 700]) {
+    if (delayMs) await sleep(delayMs);
+    try {
+      await client.chat(gameId, 'player', text);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
 async function startGame(gameId, parentSignal) {
   const ac = new AbortController();
   parentSignal.addEventListener('abort', () => ac.abort());
@@ -696,7 +853,8 @@ async function startGame(gameId, parentSignal) {
   const state = {
     id: gameId, engine, abortController: ac,
     myColor: null, opponent: null, movesPlayed: [], status: 'started',
-    lastClock: null, lastEval: null,
+    lastClock: null, lastEval: null, pendingMoveEval: null, moveLog: [],
+    startedAt: new Date().toISOString(),
   };
   activeGames.set(gameId, state);
   renderGameList();
@@ -726,8 +884,15 @@ async function startGame(gameId, parentSignal) {
         log(`game ${gameId} started vs ${state.opponent?.id || state.opponent?.name || 'anonymous'} (${state.myColor}, ${ev.speed}${ev.rated ? ' rated' : ' casual'})`, 'log-ok');
         if (settings.chat.motdEnabled && settings.chat.motd.trim() && !state.motdSent) {
           state.motdSent = true;
-          try { await client.chat(gameId, 'player', settings.chat.motd.trim()); }
-          catch (e) { log('failed to send message of the day: ' + errDetail(e), 'log-err'); }
+          // Lichess chat messages max out around 140 chars; trim defensively so an
+          // overlong MOTD can't be the reason this 400s.
+          const motdText = settings.chat.motd.trim().slice(0, 140);
+          try {
+            await sendMotdWithRetry(gameId, motdText);
+            log(`sent message of the day to game ${gameId}`, 'log-ok');
+          } catch (e) {
+            log('failed to send message of the day: ' + errDetail(e), 'log-err');
+          }
         }
         await handleGameState(state, ev.state, gameChess);
       } else if (ev.type === 'gameState') {
@@ -742,7 +907,17 @@ async function startGame(gameId, parentSignal) {
       }
     }, ac.signal);
   } catch (e) {
-    if (e.name !== 'AbortError') log(`game stream ${gameId} ended: ${e.message}`, 'log-err');
+    if (e.name !== 'AbortError') {
+      log(`game stream ${gameId} ended: ${e.message}`, 'log-err');
+      // The game didn't reach a normal finished gameState before the stream died (network
+      // drop, tab lost focus long enough to be killed, etc.) — still worth a history entry
+      // so it isn't just silently missing, but be honest that the real result is unknown.
+      if (!state.historySaved) saveGameToHistory(state, { status: 'connectionLost', winner: null });
+    } else if (!running && !state.historySaved) {
+      // Deliberate disconnect (the Connect/Disconnect button) while this game was still
+      // running — also unresolved from here, just for a different reason than above.
+      saveGameToHistory(state, { status: 'consoleDisconnected', winner: null });
+    }
   } finally {
     engine.terminate();
     activeGames.delete(gameId);
@@ -763,8 +938,29 @@ async function handleGameState(state, gs, gameChess) {
 
   const moves = gs.moves ? gs.moves.split(' ').filter(Boolean) : [];
   const newMoves = moves.slice(state.movesPlayed.length);
-  for (const m of newMoves) {
-    gameChess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m.slice(4, 5) || undefined });
+  for (let i = 0; i < newMoves.length; i++) {
+    const uci = newMoves[i];
+    const ply = state.movesPlayed.length + i; // 0-based
+    const moverColor = ply % 2 === 0 ? 'white' : 'black';
+    const isBot = moverColor === state.myColor;
+    const fenBefore = gameChess.fen();
+    const moveObj = gameChess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci.slice(4, 5) || undefined });
+    let botEval = null;
+    if (isBot && state.pendingMoveEval) {
+      botEval = state.pendingMoveEval;
+      state.pendingMoveEval = null;
+    }
+    state.moveLog.push({
+      ply: ply + 1,
+      moveNumber: Math.floor(ply / 2) + 1,
+      color: moverColor,
+      by: isBot ? 'bot' : 'opponent',
+      uci,
+      san: moveObj ? moveObj.san : null,
+      fenBefore,
+      fenAfter: gameChess.fen(),
+      botEval,
+    });
   }
   state.movesPlayed = moves;
   state.lastMove = moves.length ? { from: moves[moves.length - 1].slice(0, 2), to: moves[moves.length - 1].slice(2, 4) } : null;
@@ -778,6 +974,7 @@ async function handleGameState(state, gs, gameChess) {
   if (gs.status !== 'started') {
     log(`game ${state.id} status: ${gs.status}${gs.winner ? ' — winner: ' + gs.winner : ''}`);
     recordGameResult(state, gs);
+    saveGameToHistory(state, gs);
     return;
   }
 
@@ -836,6 +1033,9 @@ async function handleGameState(state, gs, gameChess) {
   }
 
   try {
+    // Snapshot now, before the position moves on: this is the eval that led to this
+    // exact move, and gets attached to it once it shows up in the game's move log.
+    state.pendingMoveEval = state.lastEval;
     await client.makeMove(state.id, result.bestmove);
   } catch (e) {
     log(`move submission failed for game ${state.id}: ${errDetail(e)}`, 'log-err');
