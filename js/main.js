@@ -448,8 +448,18 @@ if (bundleFiles) {
       }
     }
     bundleFiles = decoded;
-    bundle = parseBundle(bundleFiles);
-    log(`restored engine bundle from previous session: ${bundle.manifest.name} v${bundle.manifest.version}`);
+    // Reject corrupt pre-fix bundles where .wasm was saved as string
+    const manifestRaw = bundleFiles['manifest.json'];
+    let manifestCheck = {};
+    try { manifestCheck = JSON.parse(manifestRaw); } catch (_) {}
+    const wasmName = manifestCheck.wasmAsset || (Object.keys(bundleFiles).find(n => n.endsWith('.wasm')));
+    if (manifestCheck.kind === 'wasm-uci' && wasmName && typeof bundleFiles[wasmName] === 'string') {
+      log('saved engine bundle is corrupt (old .wasm as string) — reload fresh zip', 'log-err');
+      bundle = null; bundleFiles = null; saveJSON('bundle', null);
+    } else {
+      bundle = parseBundle(bundleFiles);
+      log(`restored engine bundle from previous session: ${bundle.manifest.name} v${bundle.manifest.version}`);
+    }
   } catch (e) {
     log('could not restore saved bundle: ' + e.message, 'log-err');
     bundle = null;
