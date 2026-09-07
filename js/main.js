@@ -239,6 +239,12 @@ document.getElementById('history-clear-btn')?.addEventListener('click', () => {
   renderGameHistory();
   log('game history cleared');
 });
+document.getElementById('show-cooldowns-btn')?.addEventListener('click', () => {
+  const el = document.getElementById('bot-cooldowns-display');
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (el.style.display === 'block') renderBotCooldowns();
+});
 document.getElementById('clear-logs-btn')?.addEventListener('click', () => {
   logEl.innerHTML = '';
   log('logs cleared');
@@ -764,9 +770,11 @@ function renderBotCooldowns() {
   const el = document.getElementById('bot-cooldowns-display');
   if (!el) return;
   const entries = Object.entries(settings.autoQueue.botCooldowns || {});
-  el.textContent = entries.length
-    ? 'On cooldown: ' + entries.map(([n, until]) => `${n} (until ${new Date(until).toLocaleString()})`).join(', ')
-    : '';
+  if (entries.length === 0) {
+    el.innerHTML = '<em>None</em>';
+    return;
+  }
+  el.innerHTML = '<table style="border-collapse:collapse;font-size:0.85rem;width:100%;"><thead><tr><th style="text-align:left;padding:2px 4px;border-bottom:1px solid var(--border);">Bot</th><th style="text-align:left;padding:2px 4px;border-bottom:1px solid var(--border);">Until</th></tr></thead><tbody>' + entries.map(([n, until]) => `<tr><td style="padding:2px 4px;border-bottom:1px solid var(--border);">${n}</td><td style="padding:2px 4px;border-bottom:1px solid var(--border);">${new Date(until).toLocaleString()}</td></tr>`).join('') + '</tbody></table>';
 }
 
 function isRecentlyChallenged(name) {

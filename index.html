@@ -172,7 +172,8 @@
         <label class="field"><span>Bots to challenge per attempt <span class="info-icon" tabindex="0" data-tip="Pulls the live list of currently-online bot accounts from Lichess and challenges a random sample each attempt, skipping anyone challenged in the last 10 minutes or currently on cooldown.">?</span></span><input id="autoqueue-bots-per-attempt" type="number" min="1" max="20" step="1"></label>
         <label class="field"><span>Min rating</span><input id="autoqueue-bot-rating-min" type="number" min="0" max="3500" step="10"></label>
         <label class="field"><span>Max rating <span class="info-icon" tabindex="0" data-tip="Rating checked is the bot's rating in the perf matching the time control above (e.g. &quot;3+2&quot; checks blitz rating). Bots with no recorded rating for that perf are skipped, not assumed in-range.">?</span></span><input id="autoqueue-bot-rating-max" type="number" min="0" max="3500" step="10"></label>
-        <div id="bot-cooldowns-display" class="dim"></div>
+        <button id="show-cooldowns-btn" class="btn-tiny" style="margin-top:4px;">Show bot cooldowns</button>
+        <div id="bot-cooldowns-display" class="dim" style="display:none;margin-top:4px;"></div>
       </div>
       <label class="field checkbox"><input id="autoqueue-rated" type="checkbox"><span>Rated</span></label>
       <label class="field"><span>Retry interval (sec)</span><input id="autoqueue-interval" type="number" min="5" max="600" step="5"></label>
