@@ -1,70 +1,45 @@
 # chsengine console
 
-Turn a chess engine you've built into a bot that plays real games on
-Lichess — no coding required to run it, just a web page.
+Turn a chess engine into a Lichess bot — right in your browser. No server, no install, just load your engine, paste a token, and play.
 
-Haven't built an engine yet? Use the **[chess.lab builder](https://merlin2lmml.github.io/chess.lab/builder/)**
-to put one together, then come back here to bring it to life on Lichess.
+Make an engine at the **[chess.lab builder](https://merlin2lmml.github.io/chess.lab/builder/)** with JavaScript, or build one in WebAssembly. Drop the bundle here to start playing.
 
-Try the console: https://github.com/Merlin2LmmL/chsengine-console
+Try it: https://github.com/Merlin2LmmL/chsengine-console
 
-## What it does
+## What you get
 
-You give it two things — your engine, and a Lichess bot account to play
-under — and it takes care of the rest:
+- Load your engine (JavaScript or WebAssembly bundle) and connect a bot account.
+- Accept challenges automatically or hunt for games yourself (open challenges, targeted users, random bots).
+- Watch live boards, track wins/losses/draws, and send greetings/chat replies.
+- Everything stays in your browser; your token lives only in local storage.
 
-- accepts challenges from other players, or goes looking for games itself
-- plays moves by asking your engine for its best move each turn
-- keeps a live board and a running win/loss/draw record
-- can send a hello message and reply to chat commands during games
+## Quick start
 
-Everything runs in your browser. There's nothing to install and nothing
-running on a server somewhere.
-
-## Getting started
-
-1. **Make a Lichess account for your bot** (a separate account from your
-   own — bots can't also be played by a human). On Lichess, upgrade it to a
-   bot account and grab an API token for it under Preferences → API access
-   tokens.
+1. **Bot account**: Make a separate Lichess account, upgrade to bot, grab an API token (Preferences → API access tokens).
 2. **Open the console** in your browser.
-3. **Load your engine** by dragging its file onto the drop zone. Made it
-   with the [builder](https://merlin2lmml.github.io/chess.lab/builder/)?
-   Just export it from there and drop it in.
-4. **Paste in your bot's token** and hit Connect.
+3. **Load the engine**: drag your `.zip` onto the drop zone. Built with the builder? Export from there and drop it in.
+4. **Connect**: paste the token, hit Connect.
 
-That's it — your bot is live. Anyone can find and challenge it on Lichess,
-or you can have it look for games automatically (see below).
+Your bot is live. Others can challenge it, or turn on auto-queue to find games on its own.
 
-## Getting around the console
+## The console in plain language
 
-**Engine bundle** — shows which engine is currently loaded, and lets you
-load a different one.
+**Engine** — which engine is loaded; load or swap anytime.
 
-**Time management** — how long your bot thinks before playing a move.
-Choose a fixed search depth for consistent behavior, or let it manage time
-dynamically based on the clock, so it speeds up when time is short.
+**Time** — fixed depth for consistent play, or clock-aware search that speeds up when time is low.
 
-**Matchmaking** — how your bot finds games. Turn on auto-accept to have it
-take challenges automatically (you choose which time controls and rated vs.
-casual games it's willing to play), or leave it off and accept/decline by
-hand. You can also have it actively go looking for games: post an open
-challenge, challenge specific players, or challenge random bots that are
-online — with a rating range so it's only picking fights close to its own
-strength.
+**Matchmaking** — auto-accept with filters (time control, rated/casual), post open challenges, challenge specific players/rating ranges, or challenge random bots with cooldowns.
 
-**Chat** — have your bot greet opponents at the start of a game, and
-optionally respond to simple chat commands typed by whoever it's playing.
+**Chat** — greet opponents, reply to simple commands.
 
-**Active games / Record** — watch games in progress live, and see how your
-bot is doing overall.
+**Games / Record** — live board view and overall stats.
 
-## A note on tokens
+## About your token
 
-Whatever token you use is stored only in your own browser — never sent
-anywhere except to Lichess itself, and never saved anywhere public. Still,
-don't share it or paste it somewhere others can see it.
+Your token is kept only in this browser, sent only to Lichess, and not stored publicly. Don't share it.
 
-## Engine library (wasm-uci / chsengine)
+## Engine library
 
-The console now supports `wasm-uci` bundles (e.g. `wizardbot_engine.zip`) via indexedDB storage. Drop a `.zip` into the new **Engine library** panel to persist it in-browser, or load directly from the drop zone. Bundles are validated with the existing `chsengine` format (`manifest.json` + `entry.js` + `.wasm`).
+The console supports `js-algo` (JavaScript) and `wasm-uci` (WebAssembly) bundles. Use the Engine library panel to store bundles persistently in-browser via indexedDB, load them later, or remove them. Bundles follow the `chsengine` format (`manifest.json` + `entry.js` + assets).
+
+Engines can be made on the chess.lab builder with JavaScript or via WebAssembly. Both work here.

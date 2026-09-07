@@ -92,7 +92,14 @@ export class EngineInstance {
     const entryUrl = URL.createObjectURL(entryBlob);
     this.objectUrls.push(entryUrl);
 
-    const hash = encodeURIComponent(JSON.stringify(assetUrls));
+    let hash;
+    const isWasmHashFragment = (this.bundle.manifest.kind === 'wasm-uci' && this.bundle.manifest.wasmStrategy === 'hash-fragment');
+    if (isWasmHashFragment) {
+      const wasmName = this.bundle.manifest.wasmAsset || this.bundle.assetNames.find(n => n.endsWith('.wasm'));
+      hash = encodeURIComponent(assetUrls[wasmName]);
+    } else {
+      hash = encodeURIComponent(JSON.stringify(assetUrls));
+    }
     this.worker = new Worker(entryUrl + '#' + hash);
     this.worker.onmessage = (ev) => this._handleLine(String(ev.data));
     this.worker.onerror = (ev) => {
