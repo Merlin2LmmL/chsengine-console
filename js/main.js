@@ -371,6 +371,20 @@ function refreshEngineUi() {
   }
 }
 
+/** Base64-encode an ArrayBuffer without spreading it into String.fromCharCode all at
+ * once — doing that blows past the JS engine's max-arguments-per-call limit for
+ * anything much bigger than ~64KB (this is what was throwing "too many function
+ * arguments" for wasm engine bundles). Chunking keeps each call well under that limit. */
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 0x8000; // 32KB
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
+  }
+  return btoa(binary);
+}
+
 async function loadBundleFromFiles(fileMap) {
   try {
     bundle = parseBundle(fileMap);
@@ -378,7 +392,7 @@ async function loadBundleFromFiles(fileMap) {
     const saveFriendly = {};
     for (const k in fileMap) {
       const v = fileMap[k];
-      saveFriendly[k] = (v instanceof ArrayBuffer) ? { __base64: btoa(String.fromCharCode(...new Uint8Array(v))) } : v;
+      saveFriendly[k] = (v instanceof ArrayBuffer) ? { __base64: arrayBufferToBase64(v) } : v;
     }
     saveJSON('bundle', saveFriendly);
     log(`engine bundle loaded: ${bundle.manifest.name} v${bundle.manifest.version} (${bundle.manifest.kind})`, 'log-ok');
