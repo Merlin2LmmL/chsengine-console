@@ -292,7 +292,19 @@ function recordGameResult(state, gs) {
 const logEl = document.getElementById('log');
 const MAX_LOG_LINES = 400;
 
+// How close to the bottom (in px) still counts as "at the bottom" for auto-scroll
+// purposes — an exact-equality check is too strict to survive sub-pixel scroll
+// positions some browsers report.
+const LOG_AUTOSCROLL_THRESHOLD_PX = 4;
+
+function isLogScrolledToBottom() {
+  return logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight <= LOG_AUTOSCROLL_THRESHOLD_PX;
+}
+
 function log(line, cls = '') {
+  // Snapshot BEFORE appending the new line(s) below — appending changes scrollHeight,
+  // so this has to be read first or every check would say "not at the bottom".
+  const wasAtBottom = isLogScrolledToBottom();
   const showErrOnly = document.getElementById('filter-err-only')?.checked;
   const hideGrey = document.getElementById('filter-hide-grey')?.checked;
   const engineFinal = document.getElementById('filter-engine-final')?.checked;
@@ -319,8 +331,9 @@ function log(line, cls = '') {
   row.textContent = `[${t}] ${line}`;
   logEl.appendChild(row);
   while (logEl.children.length > MAX_LOG_LINES) logEl.removeChild(logEl.firstChild);
-  // Don't force scroll on new logs so user can scroll freely
-  // logEl.scrollTop = logEl.scrollHeight;
+  // Only follow new logs if the user was already at the bottom — otherwise they're
+  // scrolled up reading something, and yanking them back down would be a nuisance.
+  if (wasAtBottom) logEl.scrollTop = logEl.scrollHeight;
 }
 
 /** Pull the actual reason out of a LichessError's response body, e.g. {"error":"..."},
