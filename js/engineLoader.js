@@ -40,8 +40,9 @@ export function parseBundle(files) {
   if (manifest.format !== 'chsengine') {
     throw new BundleParseError(`unrecognized format "${manifest.format}" (expected "chsengine")`);
   }
-  if (manifest.kind !== 'js-algo') {
-    throw new BundleParseError(`unsupported kind "${manifest.kind}" (this console only runs "js-algo" bundles)`);
+  const allowedKinds = ['js-algo', 'wasm-uci'];
+  if (!allowedKinds.includes(manifest.kind)) {
+    throw new BundleParseError(`unsupported kind "${manifest.kind}" (expected one of ${allowedKinds.join(', ')})`);
   }
   if (!manifest.entry || !files[manifest.entry]) {
     throw new BundleParseError(`entry file "${manifest.entry}" not found in bundle`);

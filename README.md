@@ -64,3 +64,7 @@ bot is doing overall.
 Whatever token you use is stored only in your own browser — never sent
 anywhere except to Lichess itself, and never saved anywhere public. Still,
 don't share it or paste it somewhere others can see it.
+
+## Engine library (wasm-uci / chsengine)
+
+The console now supports `wasm-uci` bundles (e.g. `wizardbot_engine.zip`) via indexedDB storage. Drop a `.zip` into the new **Engine library** panel to persist it in-browser, or load directly from the drop zone. Bundles are validated with the existing `chsengine` format (`manifest.json` + `entry.js` + `.wasm`).

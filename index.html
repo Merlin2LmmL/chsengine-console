@@ -78,6 +78,15 @@
       <input id="bundle-file-input" type="file" accept=".zip,.js,.json" multiple hidden>
     </div>
 
+    <div class="panel" data-collapse-key="library">
+      <h2>Engine library <span class="info-icon" tabindex="0" data-tip="Store wasm-uci / chsengine bundles in browser indexedDB">?</span></h2>
+      <div id="library-list" style="max-height:140px;overflow:auto;font-size:0.85rem;"></div>
+      <input id="library-file-input" type="file" accept=".zip" hidden>
+      <button onclick="document.getElementById('library-file-input').click()">Add .zip to library</button>
+      <button onclick="window.loadLibraryEngine()">Load selected</button>
+      <button onclick="window.removeLibraryEngine()">Remove selected</button>
+    </div>
+
     <div class="panel" data-collapse-key="time">
       <h2>Time management <span class="info-icon" tabindex="0" data-tip="Choose a fixed search depth for consistent behavior, or let the bot manage time dynamically based on the clock so it speeds up when time is short. The engine also enforces its own 15s hard cap regardless of these settings.">?</span></h2>
 

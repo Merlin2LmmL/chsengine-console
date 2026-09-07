@@ -1,5 +1,6 @@
 import { saveJSON, loadJSON } from './store.js';
 import { parseBundle, EngineInstance } from './engineLoader.js';
+import { listEngines, addEngine, getEngineBlob, removeEngine } from './engineLibrary.js';
 import { LichessClient, LichessError } from './lichessClient.js';
 import { computeGoParams, DEFAULT_TIME_SETTINGS } from './timeManager.js';
 import { createBoardSvg, renderBoard } from './board.js';
@@ -1488,3 +1489,58 @@ document.getElementById('chat-test-compile-btn').addEventListener('click', () =>
 compileCommandHandler(settings.chat.commandsCode); // whatever was saved from last session
 
 log('console ready. load an engine bundle and connect to begin.');
+
+// -----------------------------------------------------------------
+// Engine library (indexedDB) integration
+// -----------------------------------------------------------------
+let selectedLibraryId = null;
+
+async function refreshLibraryUI() {
+  const list = await listEngines();
+  const container = document.getElementById('library-list');
+  if (!container) return;
+  container.innerHTML = list.map((r, i) =>
+    `<div style="cursor:pointer;padding:2px 4px;border-bottom:1px solid #333;${i===0?'background:#333;':''}" onclick="window.selectLibraryId('${r.id}')">${r.manifest?.name || r.sourceName} (${r.manifest?.kind || '?'}) — ${new Date(r.addedAt).toLocaleString()}</div>`
+  ).join('') || '<div style="color:#777">No stored engines</div>';
+}
+window.selectLibraryId = (id) => { selectedLibraryId = id; refreshLibraryUI(); };
+window.loadLibraryEngine = async () => {
+  if (!selectedLibraryId) return alert('Select an engine in the library first');
+  const blob = await getEngineBlob(selectedLibraryId);
+  if (!blob) return alert('Engine blob missing');
+  // Feed to existing drop-zone handler via File-like object
+  const file = new File([blob], 'library.zip', { type: 'application/zip' });
+  fileInput.files = createFileList(file);
+  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+};
+window.removeLibraryEngine = async () => {
+  if (!selectedLibraryId) return alert('Select an engine to remove');
+  await removeEngine(selectedLibraryId);
+  selectedLibraryId = null;
+  refreshLibraryUI();
+};
+
+function createFileList(file) {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  return dt.files;
+}
+
+// Library file input
+const libInput = document.getElementById('library-file-input');
+if (libInput) {
+  libInput.addEventListener('change', async (e) => {
+    for (const file of e.target.files) {
+      try {
+        await addEngine(file);
+        log('Library: added ' + file.name, 'log-ok');
+      } catch (err) {
+        log('Library: failed to add ' + file.name + ' — ' + err.message, 'log-err');
+      }
+    }
+    libInput.value = '';
+    refreshLibraryUI();
+  });
+}
+
+refreshLibraryUI();
