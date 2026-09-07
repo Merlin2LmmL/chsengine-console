@@ -293,7 +293,8 @@ function log(line, cls = '') {
   row.textContent = `[${t}] ${line}`;
   logEl.appendChild(row);
   while (logEl.children.length > MAX_LOG_LINES) logEl.removeChild(logEl.firstChild);
-  logEl.scrollTop = logEl.scrollHeight;
+  // Don't force scroll on new logs so user can scroll freely
+  // logEl.scrollTop = logEl.scrollHeight;
 }
 
 /** Pull the actual reason out of a LichessError's response body, e.g. {"error":"..."},
