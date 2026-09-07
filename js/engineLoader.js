@@ -101,8 +101,8 @@ export class EngineInstance {
       hash = encodeURIComponent(JSON.stringify(assetUrls));
     }
     this.worker = new Worker(entryUrl + '#' + hash);
-    this.worker.onmessage = (ev) => this._handleLine(String(ev.data));
-    this.worker.onerror = (ev) => {
+    this.worker.onmessage = (ev) => { console.log('[engine worker] ->', String(ev.data)); this._handleLine(String(ev.data)); };
+    this.worker.onerror = (ev) => { console.error('[engine worker ERROR]', ev.message, ev.filename, ev.lineno);
       const err = new Error(`engine worker error: ${ev.message} (${ev.filename}:${ev.lineno})`);
       // Reject everything currently queued so callers don't hang forever.
       const pending = this._pending.splice(0);
@@ -126,6 +126,7 @@ export class EngineInstance {
 
   /** Send a raw command line to the worker. */
   send(line) {
+    console.log('[engine send] <-', line);
     this.worker.postMessage(line);
   }
 
@@ -147,6 +148,7 @@ export class EngineInstance {
   }
 
   async handshake() {
+    console.log('[engine handshake] sending uci');
     const uciDone = this.waitFor((l) => l === 'uciok', 5000);
     this.send('uci');
     await uciDone;
