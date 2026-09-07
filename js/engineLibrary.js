@@ -33,7 +33,7 @@ export async function addEngine(file) {
   const entries = Object.keys(zip.files || {});
   for (const name of entries) {
     if (zip.files[name].dir) continue;
-    const content = await zip.files[name].async('string');
+    const content = await zip.files[name].async(name.endsWith('.wasm') ? 'arraybuffer' : 'string');
     files[name] = content;
   }
   // Validate via existing loader (supports chsengine / wasm-uci)

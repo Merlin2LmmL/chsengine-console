@@ -349,7 +349,12 @@ async function loadBundleFromFiles(fileMap) {
   try {
     bundle = parseBundle(fileMap);
     bundleFiles = fileMap;
-    saveJSON('bundle', fileMap);
+    const saveFriendly = {};
+    for (const k in fileMap) {
+      const v = fileMap[k];
+      saveFriendly[k] = (v instanceof ArrayBuffer) ? { __base64: btoa(String.fromCharCode(...new Uint8Array(v))) } : v;
+    }
+    saveJSON('bundle', saveFriendly);
     log(`engine bundle loaded: ${bundle.manifest.name} v${bundle.manifest.version} (${bundle.manifest.kind})`, 'log-ok');
   } catch (e) {
     bundle = null;
@@ -366,14 +371,21 @@ async function handleZipFile(file) {
     const entry = zip.files[name];
     if (entry.dir) continue;
     const base = name.split('/').pop();
-    fileMap[base] = await entry.async('string');
+    if (base.endsWith('.wasm')) {
+      fileMap[base] = await entry.async('arraybuffer');
+    } else {
+      fileMap[base] = await entry.async('string');
+    }
   }
   await loadBundleFromFiles(fileMap);
 }
 
 async function handleRawFiles(fileList) {
   const fileMap = {};
-  for (const f of fileList) fileMap[f.name] = await f.text();
+  for (const f of fileList) {
+    if (f.name.endsWith('.wasm')) fileMap[f.name] = await f.arrayBuffer();
+    else fileMap[f.name] = await f.text();
+  }
   await loadBundleFromFiles(fileMap);
 }
 
@@ -396,6 +408,20 @@ fileInput.addEventListener('change', async (e) => {
 // Restore a previously loaded bundle on page load
 if (bundleFiles) {
   try {
+    // Decode any base64-encoded binary assets saved to localStorage
+    const decoded = {};
+    for (const k in bundleFiles) {
+      const v = bundleFiles[k];
+      if (v && typeof v === 'object' && v.__base64) {
+        const bytes = atob(v.__base64);
+        const arr = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+        decoded[k] = arr.buffer;
+      } else {
+        decoded[k] = v;
+      }
+    }
+    bundleFiles = decoded;
     bundle = parseBundle(bundleFiles);
     log(`restored engine bundle from previous session: ${bundle.manifest.name} v${bundle.manifest.version}`);
   } catch (e) {
