@@ -237,6 +237,10 @@ document.getElementById('history-clear-btn')?.addEventListener('click', () => {
   renderGameHistory();
   log('game history cleared');
 });
+document.getElementById('clear-logs-btn')?.addEventListener('click', () => {
+  logEl.innerHTML = '';
+  log('logs cleared');
+});
 
 function renderStats() {
   const total = stats.wins + stats.losses + stats.draws;
