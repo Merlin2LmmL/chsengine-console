@@ -62,6 +62,27 @@ function mimeFor(filename) {
   return 'application/javascript';
 }
 
+// Sentinel prefix used to recognize our own diagnostic messages on the line stream,
+// as opposed to lines coming from the engine itself.
+const ENGINE_BRIDGE_ERROR_PREFIX = '!!__enginebridge_error__ ';
+
+// Prepended to every bundle's entry script before it's executed as a Worker.
+//
+// Bundle authors' entry.js commonly load their wasm via `fetch(...).then(...)` chains
+// with no `.catch()` (this one included). If that fetch or the WebAssembly instantiation
+// fails for any reason, the rejection is silently swallowed: `Worker.onerror` does NOT
+// fire for unhandled promise rejections (only for synchronous thrown errors), so without
+// this, the console has no way to know the engine ever failed to load — it just sits
+// forever, and every command to it times out with no explanation. This reports any such
+// rejection back over the same message channel so it can be surfaced as a real error.
+const ERROR_HARNESS = `
+self.addEventListener('unhandledrejection', function (ev) {
+  var reason = ev.reason;
+  var msg = (reason && reason.message) ? reason.message : String(reason);
+  try { postMessage(${JSON.stringify(ENGINE_BRIDGE_ERROR_PREFIX)} + msg); } catch (_) {}
+});
+`;
+
 /**
  * A single running instance of a chsengine bundle, backed by one Worker.
  * Spawn one per concurrent Lichess game so searches never interleave on
@@ -88,7 +109,7 @@ export class EngineInstance {
     }
 
     const entrySrc = this.bundle.files[this.bundle.manifest.entry];
-    const entryBlob = new Blob([entrySrc], { type: 'application/javascript' });
+    const entryBlob = new Blob([ERROR_HARNESS, entrySrc], { type: 'application/javascript' });
     const entryUrl = URL.createObjectURL(entryBlob);
     this.objectUrls.push(entryUrl);
 
@@ -101,7 +122,20 @@ export class EngineInstance {
       hash = encodeURIComponent(JSON.stringify(assetUrls));
     }
     this.worker = new Worker(entryUrl + '#' + hash);
-    this.worker.onmessage = (ev) => { console.log('[engine worker] ->', String(ev.data)); this._handleLine(String(ev.data)); };
+    this.worker.onmessage = (ev) => {
+      const line = String(ev.data);
+      if (line.startsWith(ENGINE_BRIDGE_ERROR_PREFIX)) {
+        const detail = line.slice(ENGINE_BRIDGE_ERROR_PREFIX.length);
+        console.error('[engine worker] unhandled rejection inside bundle:', detail);
+        const err = new Error(`engine bundle failed to start: ${detail}`);
+        const pending = this._pending.splice(0);
+        for (const p of pending) p.reject(err);
+        if (this.onInfo) this.onInfo('!! ' + err.message);
+        return;
+      }
+      console.log('[engine worker] ->', line);
+      this._handleLine(line);
+    };
     this.worker.onerror = (ev) => { console.error('[engine worker ERROR]', ev.message, ev.filename, ev.lineno);
       const err = new Error(`engine worker error: ${ev.message} (${ev.filename}:${ev.lineno})`);
       // Reject everything currently queued so callers don't hang forever.
@@ -148,11 +182,17 @@ export class EngineInstance {
   }
 
   async handshake() {
+    // A generous, one-time-only budget: this covers worker spin-up plus compiling the
+    // wasm module, which can take noticeably longer than a normal in-game command when
+    // several engine instances are starting up concurrently (e.g. a burst of games on
+    // reconnect) on constrained hardware. Normal search commands elsewhere still use
+    // their own, much tighter, per-call timeouts.
+    const HANDSHAKE_TIMEOUT_MS = 20000;
     console.log('[engine handshake] sending uci');
-    const uciDone = this.waitFor((l) => l === 'uciok', 5000);
+    const uciDone = this.waitFor((l) => l === 'uciok', HANDSHAKE_TIMEOUT_MS);
     this.send('uci');
     await uciDone;
-    const readyDone = this.waitFor((l) => l === 'readyok', 5000);
+    const readyDone = this.waitFor((l) => l === 'readyok', HANDSHAKE_TIMEOUT_MS);
     this.send('isready');
     await readyDone;
   }
