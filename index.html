@@ -201,7 +201,11 @@
     </div>
 
     <div class="panel log-panel" data-collapse-key="log">
-      <h2>Log <button id="clear-logs-btn" class="btn-tiny">clear logs</button></h2>
+      <h2>Log <button id="clear-logs-btn" class="btn-tiny">clear logs</button>
+        <label style="font-size:0.75rem;margin-left:8px;cursor:pointer;"><input type="checkbox" id="filter-err-only"> errors only</label>
+        <label style="font-size:0.75rem;margin-left:6px;cursor:pointer;"><input type="checkbox" id="filter-hide-grey"> hide grey</label>
+        <label style="font-size:0.75rem;margin-left:6px;cursor:pointer;"><input type="checkbox" id="filter-engine-final"> engine final depth</label>
+      </h2>
       <div id="log" class="log"></div>
     </div>
 

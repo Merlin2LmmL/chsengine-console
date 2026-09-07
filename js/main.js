@@ -287,6 +287,26 @@ const logEl = document.getElementById('log');
 const MAX_LOG_LINES = 400;
 
 function log(line, cls = '') {
+  const showErrOnly = document.getElementById('filter-err-only')?.checked;
+  const hideGrey = document.getElementById('filter-hide-grey')?.checked;
+  const engineFinal = document.getElementById('filter-engine-final')?.checked;
+  if (showErrOnly && cls !== 'log-err') return;
+  if (hideGrey && !cls) return;
+  if (engineFinal && line.includes('info depth')) {
+    window._lastEngineInfoLine = { line, cls };
+    return;
+  }
+  if (engineFinal && window._lastEngineInfoLine && line.includes('bestmove')) {
+    const deferred = window._lastEngineInfoLine;
+    window._lastEngineInfoLine = null;
+    // log deferred final depth before bestmove
+    const row = document.createElement('div');
+    row.className = 'log-line' + (deferred.cls ? ' ' + deferred.cls : '');
+    const t = new Date().toLocaleTimeString('en-GB');
+    row.textContent = `[${t}] ${deferred.line}`;
+    logEl.appendChild(row);
+    while (logEl.children.length > MAX_LOG_LINES) logEl.removeChild(logEl.firstChild);
+  }
   const row = document.createElement('div');
   row.className = 'log-line' + (cls ? ' ' + cls : '');
   const t = new Date().toLocaleTimeString('en-GB');
