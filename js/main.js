@@ -32,6 +32,8 @@ const DEFAULT_SETTINGS = {
   chat: {
     motdEnabled: false,
     motd: '',
+    endMessageEnabled: true,
+    endMessage: 'Good Game',
     commandsEnabled: true,
     commandPrefix: '!',
     // Fresh installs get a working example out of the box (matches the textarea's
@@ -921,6 +923,7 @@ async function startGame(gameId, parentSignal) {
         log(`game ${gameId} started vs ${state.opponent?.id || state.opponent?.name || 'anonymous'}${oppRatingStr} (${state.myColor}, ${ev.speed}${ev.rated ? ' rated' : ' casual'})`, 'log-ok');
         if (settings.chat.motdEnabled && settings.chat.motd.trim() && !state.motdSent) {
           state.motdSent = true;
+          state.endMessageSent = false;
           // Lichess chat messages max out around 140 chars; trim defensively so an
           // overlong MOTD can't be the reason this 400s.
           const motdText = settings.chat.motd.trim().slice(0, 140);
@@ -1010,6 +1013,13 @@ async function handleGameState(state, gs, gameChess) {
 
   if (gs.status !== 'started') {
     log(`game ${state.id} status: ${gs.status}${gs.winner ? ' — winner: ' + gs.winner : ''}`);
+    if (settings.chat.endMessageEnabled && settings.chat.endMessage.trim() && !state.endMessageSent) {
+      state.endMessageSent = true;
+      try {
+        await client.chat(state.id, 'player', settings.chat.endMessage.trim().slice(0, 140));
+        log('sent end-of-game message', 'log-ok');
+      } catch (e) {}
+    }
     recordGameResult(state, gs);
     saveGameToHistory(state, gs);
     return;
@@ -1469,6 +1479,11 @@ bindCheckbox('chat-motd-enabled', 'chat.motdEnabled');
 const chatMotdInput = document.getElementById('chat-motd');
 chatMotdInput.value = settings.chat.motd;
 chatMotdInput.addEventListener('change', () => { settings.chat.motd = chatMotdInput.value; persistSettings(); });
+
+bindCheckbox('chat-end-message-enabled', 'chat.endMessageEnabled');
+const chatEndInput = document.getElementById('chat-end-message');
+chatEndInput.value = settings.chat.endMessage;
+chatEndInput.addEventListener('change', () => { settings.chat.endMessage = chatEndInput.value || 'Good Game'; persistSettings(); });
 
 bindCheckbox('chat-commands-enabled', 'chat.commandsEnabled');
 const chatPrefixInput = document.getElementById('chat-command-prefix');
