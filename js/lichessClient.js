@@ -65,8 +65,16 @@ export class LichessClient {
         const line = buf.slice(0, idx).trim();
         buf = buf.slice(idx + 1);
         if (line) {
-          try { onLine(JSON.parse(line)); }
-          catch (e) { console.warn('lichess: could not parse ndjson line', line, e); }
+          // `onLine` is async (it drives the engine and awaits Lichess API calls). It must be
+          // awaited here, not just invoked: without this, a fast pair of events (e.g. gameFull
+          // immediately followed by a gameState) can start processing concurrently, racing on
+          // shared per-game state (the chess.js position, the engine's in-flight search) and
+          // sending overlapping "position"/"go" commands to the same engine worker. Any error
+          // thrown after onLine's first await also used to become a silent unhandled promise
+          // rejection here — invisible to the UI, so a game could just stop updating with
+          // nothing logged. Awaiting it puts both failure modes under this try/catch.
+          try { await onLine(JSON.parse(line)); }
+          catch (e) { console.warn('lichess: error handling ndjson line', line, e); }
         }
       }
     }
