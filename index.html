@@ -69,22 +69,20 @@
   <section class="col-right">
 
     <div class="panel" data-collapse-key="engine">
-      <h2>Engine bundle</h2>
+      <h2>Engine <span class="info-icon" tabindex="0" data-tip="JavaScript or WebAssembly bundles; library stores them in indexedDB">?</span></h2>
       <div id="engine-name" class="engine-name">No engine loaded</div>
       <div id="engine-status" class="engine-status">Drop a .zip bundle, or its manifest.json/entry.js/assets, to begin</div>
       <div id="drop-zone" class="drop-zone">
         drop <code>.zip</code> bundle here, or click to browse
       </div>
       <input id="bundle-file-input" type="file" accept=".zip,.js,.json" multiple hidden>
-    </div>
-
-    <div class="panel" data-collapse-key="library">
-      <h2>Engine library <span class="info-icon" tabindex="0" data-tip="Store wasm-uci / chsengine bundles in browser indexedDB">?</span></h2>
-      <div id="library-list" style="max-height:140px;overflow:auto;font-size:0.85rem;"></div>
+      <div style="margin-top:8px;font-size:0.9rem;">
+        <strong>Library:</strong> <span id="library-list" style="max-height:100px;overflow:auto;font-size:0.85rem;display:inline-block;vertical-align:top;"></span>
+        <button onclick="document.getElementById('library-file-input').click()">Add .zip</button>
+        <button onclick="window.loadLibraryEngine()">Load selected</button>
+        <button onclick="window.removeLibraryEngine()">Remove</button>
+      </div>
       <input id="library-file-input" type="file" accept=".zip" hidden>
-      <button onclick="document.getElementById('library-file-input').click()">Add .zip to library</button>
-      <button onclick="window.loadLibraryEngine()">Load selected</button>
-      <button onclick="window.removeLibraryEngine()">Remove selected</button>
     </div>
 
     <div class="panel" data-collapse-key="time">
