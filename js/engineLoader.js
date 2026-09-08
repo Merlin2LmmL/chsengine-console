@@ -40,7 +40,7 @@ export function parseBundle(files) {
   if (manifest.format !== 'chsengine') {
     throw new BundleParseError(`unrecognized format "${manifest.format}" (expected "chsengine")`);
   }
-  const allowedKinds = ['js-algo', 'wasm-uci'];
+  const allowedKinds = ['js-algo', 'wasm-uci', 'rust-server'];
   if (!allowedKinds.includes(manifest.kind)) {
     throw new BundleParseError(`unsupported kind "${manifest.kind}" (expected one of ${allowedKinds.join(', ')})`);
   }

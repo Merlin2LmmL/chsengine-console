@@ -81,6 +81,7 @@
         <button onclick="document.getElementById('library-file-input').click()">Add .zip</button>
         <button onclick="window.loadLibraryEngine()">Load selected</button>
         <button onclick="window.removeLibraryEngine()">Remove</button>
+;<br>Mode: <select id="engineMode"><option value="wasm">WASM</option><option value="rust-server">Rust server (WebSocket)</option></select> <input type="text" id="wsUrl" value="ws://localhost:8765" style="width:160px">
       </div>
       <input id="library-file-input" type="file" accept=".zip" hidden>
     </div>
