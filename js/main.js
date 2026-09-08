@@ -983,12 +983,12 @@ async function startGame(gameId, parentSignal) {
   if (!bundle && (document.getElementById('engineMode')?.value === 'rust-server')) {
     // Bundle-less rust-server: synthetic WS engine talks directly to proxy
     const wsUrl = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
-    let ws = null, onInfoFn = null, resolveGo = null, wsReady = false, pendingCmd = null;
+    let ws = null, onInfoFn = null, resolveGo = null, wsReady = false, pendingCmd = [];
     function connectEngineWs() {
       ws = new WebSocket(wsUrl);
       wsReady = false;
       log(`[rust-ws] connecting to ${wsUrl}`, 'log-ok');
-      ws.onopen = () => { wsReady = true; log('[rust-ws] open', 'log-ok'); ws.send('uci'); ws.send('isready'); if (pendingCmd) { ws.send(pendingCmd); pendingCmd = null; } };
+      ws.onopen = () => { wsReady = true; log('[rust-ws] open', 'log-ok'); ws.send('uci'); ws.send('isready'); while (pendingCmd.length) { ws.send(pendingCmd.shift()); } };
       ws.onclose = () => { wsReady = false; log('[rust-ws] closed', 'log-err'); setTimeout(connectEngineWs, 500); };
       ws.onerror = () => log('[rust-ws] error', 'log-err');
       ws.onmessage = (e) => { if (typeof e.data !== 'string') return; log('  [ws] '+e.data, 'log-engine'); if (onInfoFn) onInfoFn(e.data); if (resolveGo) { const bm = e.data.match(/bestmove (\S+)/); if (bm) { log(`[rust-ws] bestmove ${bm[1]}`, 'log-ok'); resolveGo({bestmove: bm[1]}); resolveGo = null; } } };
@@ -997,8 +997,8 @@ async function startGame(gameId, parentSignal) {
       start: () => { connectEngineWs(); return engine; },
       handshake: async () => { if (wsReady) { log('[rust-ws] handshake uci', 'log-ok'); ws.send('uci'); } else log('[rust-ws] handshake skipped ws not open', 'log-err'); return new Promise(r => setTimeout(r, 300)); },
       newGame: () => {},
-      setPosition: (moves) => { const cmd = 'position startpos' + (moves.length ? ' moves ' + moves.join(' ') : ''); if (wsReady && ws && ws.readyState === WebSocket.OPEN) { log(`[rust-ws] position ...`, 'log-ok'); ws.send(cmd); } else { log(`[rust-ws] position skipped wsReady=${wsReady} ws=${ws?.readyState}`, 'log-err'); pendingCmd = cmd; } },
-      go: async (p) => new Promise((res) => { resolveGo = res; const cmd = 'go depth ' + (p.depth || 30); if (wsReady && ws && ws.readyState === WebSocket.OPEN) { log(`[rust-ws] go depth ${p.depth||30}`, 'log-ok'); ws.send(cmd); } else { log(`[rust-ws] go skipped wsReady=${wsReady} ws=${ws?.readyState}`, 'log-err'); pendingCmd = cmd; } }),
+      setPosition: (moves) => { const cmd = 'position startpos' + (moves.length ? ' moves ' + moves.join(' ') : ''); if (wsReady && ws && ws.readyState === WebSocket.OPEN) { log(`[rust-ws] position ...`, 'log-ok'); ws.send(cmd); } else { log(`[rust-ws] position skipped wsReady=${wsReady} ws=${ws?.readyState}`, 'log-err'); pendingCmd.push(cmd); } },
+      go: async (p) => new Promise((res) => { resolveGo = res; const cmd = 'go depth ' + (p.depth || 30); if (wsReady && ws && ws.readyState === WebSocket.OPEN) { log(`[rust-ws] go depth ${p.depth||30}`, 'log-ok'); ws.send(cmd); } else { log(`[rust-ws] go skipped wsReady=${wsReady} ws=${ws?.readyState}`, 'log-err'); pendingCmd.push(cmd); } }),
       terminate: () => { if (ws) { ws.close(); log('[rust-ws] terminated', 'log-ok'); } },
       set onInfo(fn) { onInfoFn = fn; },
     };
