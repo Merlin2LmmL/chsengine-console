@@ -79,6 +79,7 @@
       <div style="margin-top:8px;font-size:0.9rem;">
         <strong>Library:</strong> <span id="library-list" style="max-height:100px;overflow:auto;font-size:0.85rem;display:inline-block;vertical-align:top;"></span>
         <button onclick="document.getElementById('library-file-input').click()">Add .zip</button>
+      <div id="eval-chart" style="margin-top:6px;border-top:1px solid #ccc;padding-top:6px;"></div>
         <button onclick="window.loadLibraryEngine()">Load selected</button>
         <button onclick="window.removeLibraryEngine()">Remove</button>
 ;<br>Mode: <select id="engineMode"><option value="wasm">WASM</option><option value="rust-server">Rust server (WebSocket)</option></select> <input type="text" id="wsUrl" value="ws://localhost:8765" style="width:160px">

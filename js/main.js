@@ -3,6 +3,7 @@ import { parseBundle, EngineInstance } from './engineLoader.js';
 import { listEngines, addEngine, getEngineBlob, removeEngine } from './engineLibrary.js';
 import { LichessClient, LichessError } from './lichessClient.js';
 import { computeGoParams, DEFAULT_TIME_SETTINGS } from './timeManager.js';
+import { renderEvalChart } from './evalChart.js';
 import { createBoardSvg, renderBoard } from './board.js';
 
 // ---------------------------------------------------------------------
@@ -1645,3 +1646,4 @@ if (libInput) {
 }
 
 refreshLibraryUI();
+let evalPoints=[]; window.pushEval=(cp,mateIn)=>{evalPoints.push({cp,mateIn}); const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints);};
