@@ -1740,7 +1740,7 @@ window.openChartModal=()=>{ const pts=evalPoints.slice(chartScrollStart,chartScr
 })();
 function unloadEngine() {
   if (bundle && bundle.entry) { try { bundle.entry.terminate && bundle.entry.terminate(); } catch(e){} }
-  bundle = null; bundleFiles = null;
+  bundle = null; bundleFiles = null; saveJSON('bundle', null);
   document.getElementById('engine-name').textContent = 'No engine loaded';
   document.getElementById('engine-status').textContent = 'Engine unloaded';
   log('unloaded engine');
