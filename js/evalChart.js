@@ -1,7 +1,17 @@
-export function renderEvalChart(container, points, width=720, height=280) {
-  // points: [{cp, moveIndex, mateIn?}]
-  // if mateIn set, label M<mateIn> instead of cp
-  const yMin = -300, yMax = 300;
+export function renderEvalChart(container, points, width=720, height=280, opts={}) {
+  // opts: {yMode:'dynamic'|'fixed', yFixed:300}
+  const yMode = opts.yMode || 'fixed';
+  let yMin, yMax;
+  if (yMode === 'dynamic' && points.length > 0) {
+    const cps = points.filter(p => p.cp != null).map(p => p.cp);
+    const minC = cps.length ? Math.min(...cps) : -300;
+    const maxC = cps.length ? Math.max(...cps) : 300;
+    yMin = Math.floor(minC/100)*100 - 100;
+    yMax = Math.ceil(maxC/100)*100 + 100;
+    if (yMin > -300) yMin = -300; if (yMax < 300) yMax = 300;
+  } else {
+    yMin = -300; yMax = opts.yFixed || 300;
+  }
   const pad = {top:20, right:20, bottom:30, left:50};
   const w = width - pad.left - pad.right;
   const h = height - pad.top - pad.bottom;
@@ -16,7 +26,7 @@ export function renderEvalChart(container, points, width=720, height=280) {
   axis.setAttribute("stroke", "#ccc");
   svg.appendChild(axis);
   // y labels
-  for (let v = -300; v <= 300; v += 100) {
+  for (let v = Math.round(yMin/100)*100; v <= Math.round(yMax/100)*100; v += 100) {
     const y = pad.top + h - ((v - yMin) / (yMax - yMin)) * h;
     const text = document.createElementNS(svgNS, "text");
     text.setAttribute("x", pad.left - 8); text.setAttribute("y", y + 3);
@@ -49,4 +59,15 @@ export function renderEvalChart(container, points, width=720, height=280) {
     }
   });
   container.innerHTML = ""; container.appendChild(svg);
+}
+export function openChartModal(points, opts={}) {
+  let m = document.getElementById('eval-modal');
+  if (!m) {
+    m = document.createElement('div'); m.id='eval-modal';
+    m.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    const inner = document.createElement('div'); inner.style.cssText = 'background:#fff;color:#000;padding:20px;border-radius:8px;max-width:92%;max-height:92vh;overflow:auto;';
+    m.appendChild(inner); document.body.appendChild(m);
+    inner.innerHTML = '<button onclick="document.getElementById(\'eval-modal\').remove()" style="float:right">Close</button><div id="eval-modal-chart" style="margin-top:30px;"></div>';
+  }
+  renderEvalChart(document.getElementById('eval-modal-chart'), points, 900, 380, opts);
 }

@@ -3,7 +3,7 @@ import { parseBundle, EngineInstance } from './engineLoader.js';
 import { listEngines, addEngine, getEngineBlob, removeEngine } from './engineLibrary.js';
 import { LichessClient, LichessError } from './lichessClient.js';
 import { computeGoParams, DEFAULT_TIME_SETTINGS } from './timeManager.js';
-import { renderEvalChart } from './evalChart.js';
+import { renderEvalChart, openChartModal } from './evalChart.js';
 import { createBoardSvg, renderBoard } from './board.js';
 
 // ---------------------------------------------------------------------
@@ -1695,7 +1695,12 @@ if (libInput) {
 }
 
 refreshLibraryUI();
-let evalPoints=[]; window.pushEval=(cp,mateIn)=>{evalPoints.push({cp,mateIn}); const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints);};
+let evalPoints=[]; window.pushEval=(cp,mateIn)=>{evalPoints.push({cp,mateIn,mv:evalPoints.length+1}); const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints,720,280,getChartOpts()); const s=document.getElementById('eval-scroll'); if(s){ s.max=Math.max(0,evalPoints.length-1); } };
+let chartScrollStart=0;
+function getChartOpts() { const m=document.getElementById('eval-y-mode'); return {yMode:(m&&m.value)||'fixed',yFixed:+(document.getElementById('eval-y-fixed')?.value||300)}; }
+window.applyChartOptions=()=>{ const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints.slice(chartScrollStart,chartScrollStart+50),720,280,getChartOpts()); };
+window.applyChartScroll=(v)=>{ chartScrollStart=+v; const c=document.getElementById("eval-chart"); if(c) { const pts=evalPoints.slice(chartScrollStart,Math.min(evalPoints.length,chartScrollStart+50)); renderEvalChart(c,pts,720,280,getChartOpts()); const lbl=document.getElementById('eval-scroll-label'); if(lbl) lbl.textContent='move '+(pts[0]?.mv||0); } };
+window.openChartModal=()=>{ const pts=evalPoints.slice(chartScrollStart,chartScrollStart+80); if(typeof openChartModal==='function') openChartModal(pts,getChartOpts()); };
 
 // Rust-server WebSocket indicator + connection
 (function initWsIndicator() {
@@ -1717,3 +1722,11 @@ let evalPoints=[]; window.pushEval=(cp,mateIn)=>{evalPoints.push({cp,mateIn}); c
     } catch (e) { update('failed', '#c00'); log('WebSocket failed: '+e.message, 'log-err'); }
   };
 })();
+function unloadEngine() {
+  if (bundle && bundle.entry) { try { bundle.entry.terminate && bundle.entry.terminate(); } catch(e){} }
+  bundle = null; bundleFiles = null;
+  document.getElementById('engine-name').textContent = 'No engine loaded';
+  document.getElementById('engine-status').textContent = 'Engine unloaded';
+  log('unloaded engine');
+}
+window.unloadEngine = unloadEngine;

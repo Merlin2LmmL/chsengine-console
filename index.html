@@ -29,6 +29,13 @@
     <div class="panel" data-collapse-key="eval">
       <h2>Eval chart</h2>
       <div id="eval-chart" style="margin-top:4px;"></div>
+      <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:0.85rem;">
+        <button onclick="if(window.openChartModal) window.openChartModal()" style="font-size:0.8rem;">Full screen</button>
+        <label>Y-axis: <select id="eval-y-mode" onchange="if(window.applyChartOptions) window.applyChartOptions()"><option value="dynamic">Dynamic</option><option value="fixed">Fixed</option></select></label>
+        <input id="eval-y-fixed" type="number" value="300" style="width:60px;font-size:0.8rem;" oninput="if(window.applyChartOptions) window.applyChartOptions()">
+        <label>Scroll: <input id="eval-scroll" type="range" min="0" max="0" value="0" style="width:120px;vertical-align:middle;" oninput="if(window.applyChartScroll) window.applyChartScroll(this.value)"></label>
+        <span id="eval-scroll-label" style="font-size:0.75rem;color:#555;">move 0</span>
+      </div>
     </div>
   </section>
 
@@ -79,6 +86,7 @@
       <h2>Engine <span class="info-icon" tabindex="0" data-tip="JavaScript or WebAssembly bundles; library stores them in indexedDB">?</span></h2>
       <div id="engine-name" class="engine-name">No engine loaded</div>
       <div id="engine-status" class="engine-status">Drop a .zip bundle, or its manifest.json/entry.js/assets, to begin</div>
+      <button onclick="if(window.unloadEngine) window.unloadEngine()" style="font-size:0.8rem;margin-top:4px;">Unload engine</button>
       <div id="drop-zone" class="drop-zone">
         drop <code>.zip</code> bundle here, or click to browse
       </div>
