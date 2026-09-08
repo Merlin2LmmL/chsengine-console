@@ -11,7 +11,7 @@ import { createBoardSvg, renderBoard } from './board.js';
 // ---------------------------------------------------------------------
 
 const DEFAULT_SETTINGS = {
-  time: { ...DEFAULT_TIME_SETTINGS },
+  time: { ...DEFAULT_TIME_SETTINGS, presetDefaults: { bullet:'', blitz:'', rapid:'', classical:'', correspondence:'' } },
   matchmaking: {
     autoAccept: false,
     ratedMode: 'both', // 'rated' | 'casual' | 'both'
@@ -1011,6 +1011,16 @@ async function startGame(gameId, parentSignal) {
         state.opponent = state.myColor === 'white' ? ev.black : ev.white;
         state.rated = ev.rated;
         state.speed = ev.speed;
+        // Auto-apply preset for this speed if mapped
+        const defaults = (settings.time.presetDefaults || {});
+        const presetKey = (defaults[ev.speed] || '').trim();
+        if (presetKey && presetKey.startsWith('builtin:')) {
+          const name = presetKey.slice('builtin:'.length);
+          if (BUILTIN_TIME_PRESETS[name]) applyTimePreset({ mode: 'dynamic', ...BUILTIN_TIME_PRESETS[name] });
+        } else if (presetKey && presetKey.startsWith('saved:')) {
+          const name = presetKey.slice('saved:'.length);
+          if (timePresets[name]) applyTimePreset(timePresets[name]);
+        }
         const oppRatingStr = state.opponent?.rating != null ? ` (${state.opponent.rating})` : '';
         log(`game ${gameId} started vs ${state.opponent?.id || state.opponent?.name || 'anonymous'}${oppRatingStr} (${state.myColor}, ${ev.speed}${ev.rated ? ' rated' : ' casual'})`, 'log-ok');
         if (settings.chat.motdEnabled && settings.chat.motd.trim() && !state.motdSent) {
@@ -1453,6 +1463,25 @@ function populateTimePresetSelect(selectValue) {
   sel.value = [...sel.options].some((o) => o.value === prev) ? prev : '';
 }
 populateTimePresetSelect();
+function populatePresetDefaults() {
+  const opts = `<option value="">— none —</option>` + Object.keys(BUILTIN_TIME_PRESETS).map(n=>`<option value="builtin:${n}">${n}</option>`).join('') + Object.keys(timePresets).map(n=>`<option value="saved:${n}">${n}</option>`).join('');
+  ['bullet','blitz','rapid','classical','correspondence'].forEach(s=>{
+    const el = document.getElementById('preset-'+s);
+    if(!el) return;
+    const prev = (settings.time.presetDefaults||{})[s]||'';
+    el.innerHTML = opts;
+    el.value = prev;
+  });
+}
+populatePresetDefaults();
+['bullet','blitz','rapid','classical','correspondence'].forEach(s=>{
+  const el = document.getElementById('preset-'+s);
+  if(el) el.addEventListener('change', e=>{
+    if(!settings.time.presetDefaults) settings.time.presetDefaults={};
+    settings.time.presetDefaults[s]=e.target.value;
+    persistSettings();
+  });
+});
 
 document.getElementById('time-preset-select').addEventListener('change', (e) => {
   const val = e.target.value;

@@ -99,7 +99,15 @@
         </label>
         <div class="preset-actions">
           <input id="time-preset-name" type="text" placeholder="name to save as…">
-          <button id="time-preset-save-btn" class="btn-tiny">Save</button>
+          <div style="margin-top:10px;border-top:1px solid #ccc;padding-top:8px;font-size:0.9rem;">
+        <strong>Default preset per speed:</strong><br>
+        <label style="display:inline-block;margin:2px 8px 2px 0;">Bullet <select id="preset-bullet"><option value="">— none —</option></select></label>
+        <label style="display:inline-block;margin:2px 8px 2px 0;">Blitz <select id="preset-blitz"><option value="">— none —</option></select></label>
+        <label style="display:inline-block;margin:2px 8px 2px 0;">Rapid <select id="preset-rapid"><option value="">— none —</option></select></label>
+        <label style="display:inline-block;margin:2px 8px 2px 0;">Classical <select id="preset-classical"><option value="">— none —</option></select></label>
+        <label style="display:inline-block;margin:2px 8px 2px 0;">Correspondence <select id="preset-correspondence"><option value="">— none —</option></select></label>
+      </div>
+      <button id="time-preset-save-btn" class="btn-tiny">Save</button>
           <button id="time-preset-delete-btn" class="btn-tiny btn-danger">Delete</button>
         </div>
       </div>
