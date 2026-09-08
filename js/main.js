@@ -1158,12 +1158,20 @@ async function handleGameState(state, gs, gameChess) {
   const myTurn = (state.myColor === 'white') === whiteToMove;
   if (!myTurn) return;
 
-  const { remainingMs, incrementMs } = uciClockFields(gs, state.myColor);
-  const params = computeGoParams(settings.time.mode, settings.time, { remainingMs, incrementMs });
+  const clockForEngine = settings.time.useEngineTimeManagement
+    ? { wtime: gs?.wtime ?? 0, btime: gs?.btime ?? 0, winc: gs?.winc ?? 0, binc: gs?.binc ?? 0 }
+    : { remainingMs: (state.myColor === 'white' ? gs?.wtime : gs?.btime) ?? 0, incrementMs: (state.myColor === 'white' ? gs?.winc : gs?.binc) ?? 0 };
+  const params = computeGoParams(settings.time.mode, settings.time, clockForEngine);
 
   const positionCmd = moves.length ? `position startpos moves ${moves.join(' ')}` : 'position startpos';
-  const goCmd = ['go', params.depth != null ? `depth ${params.depth}` : null, params.movetimeMs != null ? `movetime ${Math.round(params.movetimeMs)}` : null]
-    .filter(Boolean).join(' ');
+  const goCmd = ['go',
+    params.depth != null ? `depth ${params.depth}` : null,
+    params.movetimeMs != null ? `movetime ${Math.round(params.movetimeMs)}` : null,
+    params.wtimeMs != null ? `wtime ${Math.round(params.wtimeMs)}` : null,
+    params.btimeMs != null ? `btime ${Math.round(params.btimeMs)}` : null,
+    params.wincMs != null ? `winc ${Math.round(params.wincMs)}` : null,
+    params.bincMs != null ? `binc ${Math.round(params.bincMs)}` : null,
+  ].filter(Boolean).join(' ');
   if (selectedGameId === state.id) {
     // What we're actually telling the engine to search, so a fixed/repeating search
     // output across different games (a real engine bug seen in the wild) is easy to
@@ -1412,6 +1420,7 @@ function setPath(obj, path, val) {
 }
 
 bindSelect('time-mode', 'time.mode');
+bindCheckbox('time-use-engine-time', 'time.useEngineTimeManagement');
 bindNumber('static-depth', 'time.staticDepth');
 bindNumber('static-safety-ms', 'time.staticSafetyMs');
 bindNumber('dynamic-est-moves', 'time.estMovesLeft');
@@ -1463,6 +1472,7 @@ const TIME_FIELD_IDS = {
   maxMoveMs: 'dynamic-max-ms',
   overheadMs: 'dynamic-overhead-ms',
   dynamicMaxDepth: 'dynamic-max-depth',
+  useEngineTimeManagement: 'time-use-engine-time',
 };
 
 let timePresets = loadJSON('timePresets', {}); // name -> saved settings.time snapshot

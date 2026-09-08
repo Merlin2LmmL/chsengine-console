@@ -214,6 +214,10 @@ export class EngineInstance {
     const parts = ['go'];
     if (opts.depth != null) parts.push('depth', String(opts.depth));
     if (opts.movetimeMs != null) parts.push('movetime', String(Math.round(opts.movetimeMs)));
+    if (opts.wtimeMs != null) parts.push('wtime', String(Math.round(opts.wtimeMs)));
+    if (opts.btimeMs != null) parts.push('btime', String(Math.round(opts.btimeMs)));
+    if (opts.wincMs != null) parts.push('winc', String(Math.round(opts.wincMs)));
+    if (opts.bincMs != null) parts.push('binc', String(Math.round(opts.bincMs)));
 
     let last = { score: null, depth: null, nodes: null, nps: null, timeMs: null };
     const infoListener = (line) => {

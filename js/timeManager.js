@@ -1,30 +1,3 @@
-// timeManager.js
-//
-// Turns the current clock state + user settings into the {depth, movetimeMs}
-// pair that gets sent to the engine as a "go" command.
-//
-// Two modes:
-//
-//   static   - fixed search depth every move. `safetyMs` is passed as the
-//              movetime cap so the iterative-deepening loop isn't cut off
-//              before it reaches that depth (the engine already hard-caps
-//              at 15s internally regardless of what we send).
-//
-//   dynamic  - depth is uncapped (up to `maxDepth`, a sanity ceiling) and the
-//              move gets a computed time budget instead, based on remaining
-//              clock. Standard "fraction of remaining time" allocator:
-//
-//                budget = remaining / estMovesLeft + increment * incWeight
-//                budget = clamp(budget, minMoveMs, maxMoveMs)
-//                budget = min(budget, remaining * maxFractionOfRemaining)
-//
-//              estMovesLeft is a rough guess of how many moves are left in
-//              the game; smaller means it burns time faster early, larger
-//              means it conserves more. The maxFractionOfRemaining clamp is
-//              what actually prevents flagging: no single move is ever
-//              allowed to spend more than that fraction of what's left on
-//              the clock, no matter what the formula above says.
-
 export function computeGoParams(mode, settings, clock) {
   if (mode === 'static') {
     return {
@@ -34,6 +7,20 @@ export function computeGoParams(mode, settings, clock) {
   }
 
   // dynamic
+  if (settings.useEngineTimeManagement) {
+    // Return raw clock state for engine-side time management (wtime/btime/winc/binc).
+    // Do NOT include movetimeMs — movetime takes precedence over wtime/btime
+    // in the engine's UCI fix (src/uci.rs) and would suppress the clock params.
+    const { wtime, btime, winc, binc } = clock;
+    return {
+      depth: settings.dynamicMaxDepth,
+      wtimeMs: wtime,
+      btimeMs: btime,
+      wincMs: winc,
+      bincMs: binc,
+    };
+  }
+
   const { remainingMs, incrementMs } = clock;
   const overhead = settings.overheadMs;
   const safeRemaining = Math.max(remainingMs - overhead, 50);
@@ -51,6 +38,7 @@ export function computeGoParams(mode, settings, clock) {
 
 export const DEFAULT_TIME_SETTINGS = {
   mode: 'dynamic',
+  useEngineTimeManagement: false,
   // static mode
   staticDepth: 5,
   staticSafetyMs: 10000,
