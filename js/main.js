@@ -983,7 +983,7 @@ async function startGame(gameId, parentSignal) {
   const state = {
     id: gameId, engine, abortController: ac,
     myColor: null, opponent: null, movesPlayed: [], status: 'started',
-    lastClock: null, lastEval: null, pendingMoveEval: null, moveLog: [],
+    lastClock: null, lastEval: null, prevMoveEval: null, pendingMoveEval: null, moveLog: [],
     startedAt: new Date().toISOString(),
   };
   activeGames.set(gameId, state);
@@ -1157,7 +1157,7 @@ async function handleGameState(state, gs, gameChess) {
       // commands like "!eval" can report it even when this game isn't the selected one.
       state.lastEval = { depth: +m[1], scoreCp: +m[2], nodes: +m[3], nps: +m[4], timeMs: +m[5] };
       if (selectedGameId === state.id) pushTelemetry(+m[1], +m[2], +m[3], +m[4], +m[5]);
-      if (window.pushEval) window.pushEval(+m[2]);
+      // Chart gets one point per finished move, not per depth line
     }
   };
 
@@ -1186,6 +1186,13 @@ async function handleGameState(state, gs, gameChess) {
     // Snapshot now, before the position moves on: this is the eval that led to this
     // exact move, and gets attached to it once it shows up in the game's move log.
     state.pendingMoveEval = state.lastEval;
+    if (state.prevMoveEval && state.lastEval && state.lastEval.scoreCp != null && state.prevMoveEval.scoreCp != null) {
+      const delta = state.lastEval.scoreCp - state.prevMoveEval.scoreCp;
+      if (delta < -200) { try { await client.chat(state.id, 'player', "Oh no I think I've made a mistake. Great find."); } catch(e){} }
+      else if (delta > 200) { try { await client.chat(state.id, 'player', "I think you might have made a mistake."); } catch(e){} }
+    }
+    state.prevMoveEval = state.lastEval ? { ...state.lastEval } : null;
+    if (window.pushEval && state.pendingMoveEval && state.pendingMoveEval.scoreCp != null) window.pushEval(state.pendingMoveEval.scoreCp);
     await client.makeMove(state.id, result.bestmove);
   } catch (e) {
     log(`move submission failed for game ${state.id}: ${errDetail(e)}`, 'log-err');
