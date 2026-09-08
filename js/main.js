@@ -985,12 +985,20 @@ async function startGame(gameId, parentSignal) {
     const wsUrl = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
     let ws = null, onInfoFn = null, resolveGo = null;
     engine = {
-      start: () => { ws = new WebSocket(wsUrl); ws.onopen = () => { ws.send('uci'); ws.send('isready'); }; ws.onmessage = (e) => { if (typeof e.data !== 'string') return; if (onInfoFn) onInfoFn(e.data); if (resolveGo) { const bm = e.data.match(/bestmove (\S+)/); if (bm) { resolveGo({bestmove: bm[1]}); resolveGo = null; } } }; return engine; },
-      handshake: async () => { if (ws && ws.readyState === 1) ws.send('uci'); return new Promise(r => setTimeout(r, 300)); },
+      start: () => {
+        ws = new WebSocket(wsUrl);
+        log(`[rust-ws] connecting to ${wsUrl}`, 'log-ok');
+        ws.onopen = () => { log('[rust-ws] open', 'log-ok'); ws.send('uci'); ws.send('isready'); };
+        ws.onclose = () => log('[rust-ws] closed', 'log-err');
+        ws.onerror = () => log('[rust-ws] error', 'log-err');
+        ws.onmessage = (e) => { if (typeof e.data !== 'string') return; log('  [ws] '+e.data, 'log-engine'); if (onInfoFn) onInfoFn(e.data); if (resolveGo) { const bm = e.data.match(/bestmove (\S+)/); if (bm) { log(`[rust-ws] bestmove ${bm[1]}`, 'log-ok'); resolveGo({bestmove: bm[1]}); resolveGo = null; } } };
+        return engine;
+      },
+      handshake: async () => { if (ws && ws.readyState === 1) { log('[rust-ws] handshake uci', 'log-err'); ws.send('uci'); } else log('[rust-ws] handshake skipped ws not open', 'log-err'); return new Promise(r => setTimeout(r, 300)); },
       newGame: () => {},
-      setPosition: (moves) => { if (ws && ws.readyState === 1) ws.send('position startpos' + (moves.length ? ' moves ' + moves.join(' ') : '')); },
-      go: async (p) => new Promise((res) => { resolveGo = res; if (ws && ws.readyState === 1) ws.send('go depth ' + (p.depth || 30)); }),
-      terminate: () => { if (ws) ws.close(); },
+      setPosition: (moves) => { if (ws && ws.readyState === 1) { log(`[rust-ws] position ...`, 'log-ok'); ws.send('position startpos' + (moves.length ? ' moves ' + moves.join(' ') : '')); } else log('[rust-ws] setPosition skipped ws='+ws?.readyState, 'log-err'); },
+      go: async (p) => new Promise((res) => { resolveGo = res; if (ws && ws.readyState === 1) { log(`[rust-ws] go depth ${p.depth||30}`, 'log-ok'); ws.send('go depth ' + (p.depth || 30)); } else log('[rust-ws] go skipped ws='+ws?.readyState, 'log-err'); }),
+      terminate: () => { if (ws) { ws.close(); log('[rust-ws] terminated', 'log-ok'); } },
       set onInfo(fn) { onInfoFn = fn; },
     };
   } else {
