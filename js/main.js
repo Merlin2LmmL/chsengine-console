@@ -41,9 +41,13 @@ const DEFAULT_SETTINGS = {
     // placeholder). Existing users who already saved an empty commandsCode keep
     // whatever they saved — this default only applies the first time settings load.
     commandsCode: `function handleCommand(cmd, args, ctx) {
+  // Swing / blunder messages based on delta from previous eval (persisted on function)
   if (!cmd && ctx && ctx.eval && ctx.eval.scoreCp != null) {
-    if (ctx.eval.scoreCp > 200) return "I think you just made a mistake";
-    if (ctx.eval.scoreCp < -200) return "I think I just made a mistake";
+    const prev = handleCommand.prevScore == null ? ctx.eval.scoreCp : handleCommand.prevScore;
+    const delta = ctx.eval.scoreCp - prev;
+    handleCommand.prevScore = ctx.eval.scoreCp;
+    if (delta < -200) return "Oh no I think I've made a mistake. Great find.";
+    if (delta > 200) return "I think you might have made a mistake.";
   }
   if (cmd === 'eval') {
     if (!ctx.eval) return "haven't finished a search yet";
