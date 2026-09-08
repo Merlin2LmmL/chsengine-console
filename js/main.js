@@ -564,7 +564,8 @@ let running = false;
 async function connect() {
   const token = tokenInput.value.trim();
   if (!token) { log('enter a Lichess API token first', 'log-err'); return; }
-  if (!bundle) { log('load an engine bundle first', 'log-err'); return; }
+  const isBundleLessRust = (!bundle) && (document.getElementById('engineMode')?.value === 'rust-server');
+  if (!bundle && !isBundleLessRust) { log('load an engine bundle first', 'log-err'); return; }
 
   saveJSON('token', token);
   client = new LichessClient(token);
@@ -834,7 +835,8 @@ function shuffleInPlace(arr) {
 async function queueOnce(reason = 'manual') {
   if (queueInFlight) return;
   if (!client) { log('connect first before queueing', 'log-err'); return; }
-  if (!bundle) { log('load an engine bundle first', 'log-err'); return; }
+  const isBundleLessRust = (!bundle) && (document.getElementById('engineMode')?.value === 'rust-server');
+  if (!bundle && !isBundleLessRust) { log('load an engine bundle first', 'log-err'); return; }
   if (activeGames.size >= settings.matchmaking.maxConcurrentGames) {
     log(`skipping queue (${reason}): max concurrent games (${settings.matchmaking.maxConcurrentGames}) already running`);
     return;
