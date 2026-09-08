@@ -1,4 +1,4 @@
-export function renderEvalChart(container, points, width=560, height=220) {
+export function renderEvalChart(container, points, width=720, height=280) {
   // points: [{cp, moveIndex, mateIn?}]
   // if mateIn set, label M<mateIn> instead of cp
   const yMin = -300, yMax = 300;
