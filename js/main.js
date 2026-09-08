@@ -1147,6 +1147,7 @@ async function handleGameState(state, gs, gameChess) {
       // commands like "!eval" can report it even when this game isn't the selected one.
       state.lastEval = { depth: +m[1], scoreCp: +m[2], nodes: +m[3], nps: +m[4], timeMs: +m[5] };
       if (selectedGameId === state.id) pushTelemetry(+m[1], +m[2], +m[3], +m[4], +m[5]);
+      if (window.pushEval) window.pushEval(+m[2]);
     }
   };
 
