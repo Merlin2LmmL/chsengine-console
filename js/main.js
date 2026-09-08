@@ -1689,3 +1689,24 @@ if (libInput) {
 
 refreshLibraryUI();
 let evalPoints=[]; window.pushEval=(cp,mateIn)=>{evalPoints.push({cp,mateIn}); const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints);};
+
+// Rust-server WebSocket indicator + connection
+(function initWsIndicator() {
+  const statusEl = document.getElementById('ws-status');
+  if (!statusEl) return;
+  function update(s, color) { statusEl.textContent = s; statusEl.style.color = color || '#888'; }
+  const modeSel = document.getElementById('engineMode');
+  if (modeSel && modeSel.value === 'rust-server') { update('connecting…', '#aa0'); }
+  // Expose simple connect for manual / event trigger
+  window.connectRustServer = function() {
+    const url = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
+    try {
+      const ws = new WebSocket(url);
+      ws.onopen = () => { update('connected', '#0a0'); log('WebSocket server connected: '+url, 'log-ok'); ws.send('uci'); };
+      ws.onclose = () => { update('disconnected', '#c00'); log('WebSocket server disconnected', 'log-err'); };
+      ws.onerror = (e) => { update('error', '#c00'); log('WebSocket error', 'log-err'); };
+      ws.onmessage = (ev) => { log('  [ws] '+String(ev.data), 'log-engine'); };
+      window._rustWs = ws;
+    } catch (e) { update('failed', '#c00'); log('WebSocket failed: '+e.message, 'log-err'); }
+  };
+})();

@@ -82,7 +82,7 @@
       <div id="eval-chart" style="margin-top:6px;border-top:1px solid #ccc;padding-top:6px;"></div>
         <button onclick="window.loadLibraryEngine()">Load selected</button>
         <button onclick="window.removeLibraryEngine()">Remove</button>
-;<br>Mode: <select id="engineMode"><option value="wasm">WASM</option><option value="rust-server">Rust server (WebSocket)</option></select> <input type="text" id="wsUrl" value="ws://localhost:8765" style="width:160px">
+;<br>Mode: <select id="engineMode"><option value="wasm">WASM</option><option value="rust-server">Rust server (WebSocket)</option></select> <input type="text" id="wsUrl" value="ws://localhost:8765" style="width:160px"> <span id="ws-status" style="font-size:0.8rem;color:#888;">not connected</span>
       </div>
       <input id="library-file-input" type="file" accept=".zip" hidden>
     </div>
