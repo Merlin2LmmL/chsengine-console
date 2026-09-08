@@ -35,19 +35,24 @@ const DEFAULT_SETTINGS = {
     motd: '',
     endMessageEnabled: true,
     endMessage: 'Good Game',
-    commandsEnabled: true,
+    commandsEnabled: false,
     commandPrefix: '!',
     // Fresh installs get a working example out of the box (matches the textarea's
     // placeholder). Existing users who already saved an empty commandsCode keep
     // whatever they saved — this default only applies the first time settings load.
     commandsCode: `function handleCommand(cmd, args, ctx) {
+  if (!cmd && ctx && ctx.eval && ctx.eval.scoreCp != null) {
+    if (ctx.eval.scoreCp > 200) return "I think you just made a mistake";
+    if (ctx.eval.scoreCp < -200) return "I think I just made a mistake";
+  }
   if (cmd === 'eval') {
     if (!ctx.eval) return "haven't finished a search yet";
     const pawns = (ctx.eval.scoreCp / 100).toFixed(2);
     return \`eval: \${pawns} (depth \${ctx.eval.depth}, from \${ctx.color} to move)\`;
   }
   if (cmd === 'rating') return 'no clue, ask lichess';
-  return null; // no reply
+  if (cmd === 'help') return '!eval !rating help';
+  return null;
 }`,
   },
   display: {
@@ -1209,7 +1214,10 @@ function compileCommandHandler(code) {
 async function handleChatCommand(state, ev, gameChess) {
   const prefix = settings.chat.commandPrefix || '!';
   const text = (ev.text || '').trim();
-  if (!text.startsWith(prefix)) return; // not something meant as a command, stay quiet
+  const isCommand = text.startsWith(prefix);
+  if (!isCommand && !settings.chat.commandsEnabled) return; // stay quiet if disabled and not command
+
+  // Allow independent messages (no prefix) when commands enabled
 
   // Everything below only runs once a line actually looks like a command attempt, so
   // these checks can log loudly without spamming the log for ordinary chat banter —
@@ -1217,7 +1225,7 @@ async function handleChatCommand(state, ev, gameChess) {
   // "!rating" line in-game produced no error and no reply: nothing was actually wrong,
   // there was just nothing configured to respond to it yet.
   if (!settings.chat.commandsEnabled) {
-    log(`ignored "${text}" — custom chat commands are off (Chat panel → "Enable custom chat commands")`, 'log-err');
+    log(`ignored "${text}" — custom chat commands are off (Chat panel → "Enable chat responses")`, 'log-err');
     return;
   }
   if (!compiledCommandHandler) {
@@ -1228,8 +1236,8 @@ async function handleChatCommand(state, ev, gameChess) {
     return;
   }
 
-  const [rawCmd, ...args] = text.slice(prefix.length).trim().split(/\s+/);
-  const cmd = (rawCmd || '').toLowerCase();
+  const [rawCmd, ...args] = isCommand ? text.slice(prefix.length).trim().split(/\s+/) : ['', ...text.trim().split(/\s+/)];
+  const cmd = isCommand ? (rawCmd || '').toLowerCase() : '';
   const ctx = {
     gameId: state.id,
     color: state.myColor,

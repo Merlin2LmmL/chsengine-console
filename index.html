@@ -193,7 +193,7 @@
         <span>End-of-game message</span>
         <input id="chat-end-message" type="text" value="Good Game" placeholder="Good Game">
       </label>
-      <label class="field checkbox"><input id="chat-commands-enabled" type="checkbox"><span>Enable custom chat commands</span></label>
+      <label class="field checkbox"><input id="chat-commands-enabled" type="checkbox"><span>Enable chat responses</span></label>
       <label class="field"><span>Command prefix</span><input id="chat-command-prefix" type="text" maxlength="3" style="width:3em"></label>
       <label class="field-block">
         <span>Command handler (JS) <span class="info-icon" tabindex="0" data-tip="Define function handleCommand(cmd, args, ctx). Called for every opponent chat line starting with the prefix above (cmd lowercased, args the rest split on whitespace). Return a string to send back as a chat reply, or null/nothing to stay silent — it can also be async. ctx gives you { gameId, color, opponent, movesPlayed, chess, eval, log }: chess is the live chess.js instance (read it, don't mutate it); eval is your engine's last finished search result for this game — { depth, scoreCp, nodes, nps, timeMs } from the side to move's perspective, or null if no search has completed yet. This runs as plain JS in your own browser tab with no sandboxing — only paste code you trust.">?</span></span>
