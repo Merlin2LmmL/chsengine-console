@@ -977,7 +977,23 @@ async function startGame(gameId, parentSignal) {
   const chessCtor = window.Chess;
   const gameChess = new chessCtor();
 
-  const engine = new EngineInstance(bundle).start();
+  let engine;
+  if (!bundle && (document.getElementById('engineMode')?.value === 'rust-server')) {
+    // Bundle-less rust-server: synthetic WS engine talks directly to proxy
+    const wsUrl = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
+    let ws = null, onInfoFn = null, resolveGo = null;
+    engine = {
+      start: () => { ws = new WebSocket(wsUrl); ws.onopen = () => { ws.send('uci'); ws.send('isready'); }; ws.onmessage = (e) => { if (typeof e.data !== 'string') return; if (onInfoFn) onInfoFn(e.data); if (resolveGo) { const bm = e.data.match(/bestmove (\S+)/); if (bm) { resolveGo({bestmove: bm[1]}); resolveGo = null; } } }; return engine; },
+      handshake: async () => { if (ws && ws.readyState === 1) ws.send('uci'); return new Promise(r => setTimeout(r, 300)); },
+      newGame: () => {},
+      setPosition: (moves) => { if (ws && ws.readyState === 1) ws.send('position startpos' + (moves.length ? ' moves ' + moves.join(' ') : '')); },
+      go: async (p) => new Promise((res) => { resolveGo = res; if (ws && ws.readyState === 1) ws.send('go depth ' + (p.depth || 30)); }),
+      terminate: () => { if (ws) ws.close(); },
+      set onInfo(fn) { onInfoFn = fn; },
+    };
+  } else {
+    engine = new EngineInstance(bundle).start();
+  }
   engine.onInfo = (line) => { if (selectedGameId === gameId) log('  ' + line, 'log-engine'); };
 
   const state = {
