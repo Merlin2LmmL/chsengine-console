@@ -984,15 +984,26 @@ async function startGame(gameId, parentSignal) {
     // Bundle-less rust-server: synthetic WS engine talks directly to proxy
     const wsUrl = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
     let ws = null, onInfoFn = null, resolveGo = null, wsReady = false, pendingCmd = [];
+    let connectCallCount = 0;
+    let connectPromise = null;
     function connectEngineWs() {
-      log('[rust-ws] connectEngineWs() ENTER', 'log-ok');
-      return new Promise((resolve, reject) => {
+      log(`[rust-ws] connectEngineWs() call #${++connectCallCount}`, 'log-ok');
+      // Guard: reuse in-flight promise or open socket; do not spawn duplicate WebSockets
+      if (connectPromise) {
+        log(`[rust-ws] guard: reusing in-flight promise (wsReady=${wsReady} ws=${ws?.readyState})`, 'log-ok');
+        return connectPromise;
+      }
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        log(`[rust-ws] guard: ws already open/connecting (readyState=${ws.readyState})`, 'log-ok');
+        return Promise.resolve();
+      }
+      connectPromise = new Promise((resolve, reject) => {
         ws = new WebSocket(wsUrl);
         wsReady = false;
         log(`[rust-ws] connecting to ${wsUrl}`, 'log-ok');
         const openTimeout = setTimeout(() => { if (wsReady) return; reject(new Error('rust-ws open timeout')); }, 5000);
-        ws.onopen = () => { wsReady = true; clearTimeout(openTimeout); log('[rust-ws] open', 'log-ok'); ws.send('uci'); ws.send('isready'); while (pendingCmd.length) { ws.send(pendingCmd.shift()); } resolve(); };
-        ws.onclose = () => { wsReady = false; log('[rust-ws] closed', 'log-err'); setTimeout(connectEngineWs, 500); };
+        ws.onopen = () => { wsReady = true; connectPromise = null; clearTimeout(openTimeout); log('[rust-ws] open', 'log-ok'); ws.send('uci'); ws.send('isready'); while (pendingCmd.length) { ws.send(pendingCmd.shift()); } resolve(); };
+        ws.onclose = () => { wsReady = false; connectPromise = null; log('[rust-ws] closed', 'log-err'); setTimeout(connectEngineWs, 500); };
         ws.onerror = () => { log('[rust-ws] error', 'log-err'); clearTimeout(openTimeout); reject(new Error('rust-ws error')); };
         ws.onmessage = (e) => { if (typeof e.data !== 'string') return; log('  [ws] '+e.data, 'log-engine'); if (onInfoFn) onInfoFn(e.data); if (resolveGo) { const bm = e.data.match(/bestmove (\S+)/); if (bm) { log(`[rust-ws] bestmove ${bm[1]}`, 'log-ok'); resolveGo({bestmove: bm[1]}); resolveGo = null; } } };
       });
@@ -1022,7 +1033,9 @@ async function startGame(gameId, parentSignal) {
   if (!selectedGameId) selectGame(gameId);
 
   try {
+    log('[rpc-debug] ABOUT TO await engine.start() at game-start site', 'log-ok');
     await engine.start();
+    log(`[rpc-debug] start resolved ws.readyState=${ws?.readyState} wsReady=${wsReady}`, 'log-ok');
     await engine.handshake();
     engine.newGame();
   } catch (e) {
