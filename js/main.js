@@ -980,12 +980,16 @@ async function startGame(gameId, parentSignal) {
   const gameChess = new chessCtor();
 
   let engine;
-  if (!bundle && (document.getElementById('engineMode')?.value === 'rust-server')) {
+  // Per-game rust-server connection state (function-scoped so it's accessible
+  // after engine.start() resolves, but still isolated per startGame() call).
+  let ws = null, onInfoFn = null, resolveGo = null, wsReady = false, pendingCmd = [];
+  let connectCallCount = 0;
+  let connectPromise = null;
+  const isRustServer = !bundle && (document.getElementById('engineMode')?.value === 'rust-server');
+
+  if (isRustServer) {
     // Bundle-less rust-server: synthetic WS engine talks directly to proxy
     const wsUrl = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
-    let ws = null, onInfoFn = null, resolveGo = null, wsReady = false, pendingCmd = [];
-    let connectCallCount = 0;
-    let connectPromise = null;
     function connectEngineWs() {
       log(`[rust-ws] connectEngineWs() call #${++connectCallCount}`, 'log-ok');
       // Guard: reuse in-flight promise or open socket; do not spawn duplicate WebSockets
@@ -1036,7 +1040,7 @@ async function startGame(gameId, parentSignal) {
     log('[rpc-debug] ABOUT TO await engine.start() at game-start site', 'log-ok');
     await engine.start();
     // Only reference ws/wsReady when engine is rust-server (those vars declared in that branch)
-    if (typeof ws !== 'undefined') {
+    if (isRustServer) {
       log(`[rpc-debug] start resolved ws.readyState=${ws?.readyState} wsReady=${wsReady}`, 'log-ok');
     } else {
       log(`[rpc-debug] start resolved (bundle engine)`, 'log-ok');
@@ -1044,7 +1048,7 @@ async function startGame(gameId, parentSignal) {
     await engine.handshake();
     engine.newGame();
   } catch (e) {
-    log(`engine failed to start for game ${gameId}: ${e.message}`, 'log-err');
+    log(`engine failed to start for game ${gameId}: ${e.stack}`, 'log-err');
     activeGames.delete(gameId);
     renderGameList();
     return;
