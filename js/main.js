@@ -998,7 +998,7 @@ async function startGame(gameId, parentSignal) {
         return Promise.resolve();
       }
       connectPromise = new Promise((resolve, reject) => {
-        ws = new WebSocket(wsUrl);
+        try { ws = new WebSocket(wsUrl); } catch (err) { reject(err); return; }
         wsReady = false;
         log(`[rust-ws] connecting to ${wsUrl}`, 'log-ok');
         const openTimeout = setTimeout(() => { if (wsReady) return; reject(new Error('rust-ws open timeout')); }, 5000);
