@@ -985,6 +985,7 @@ async function startGame(gameId, parentSignal) {
     const wsUrl = (document.getElementById('wsUrl') || {}).value || 'ws://localhost:8765';
     let ws = null, onInfoFn = null, resolveGo = null, wsReady = false, pendingCmd = [];
     function connectEngineWs() {
+      log('[rust-ws] connectEngineWs() ENTER', 'log-ok');
       ws = new WebSocket(wsUrl);
       wsReady = false;
       log(`[rust-ws] connecting to ${wsUrl}`, 'log-ok');
@@ -1018,6 +1019,7 @@ async function startGame(gameId, parentSignal) {
   if (!selectedGameId) selectGame(gameId);
 
   try {
+    engine.start();
     await engine.handshake();
     engine.newGame();
   } catch (e) {
