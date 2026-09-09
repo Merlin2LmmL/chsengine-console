@@ -1035,7 +1035,12 @@ async function startGame(gameId, parentSignal) {
   try {
     log('[rpc-debug] ABOUT TO await engine.start() at game-start site', 'log-ok');
     await engine.start();
-    log(`[rpc-debug] start resolved ws.readyState=${ws?.readyState} wsReady=${wsReady}`, 'log-ok');
+    // Only reference ws/wsReady when engine is rust-server (those vars declared in that branch)
+    if (typeof ws !== 'undefined') {
+      log(`[rpc-debug] start resolved ws.readyState=${ws?.readyState} wsReady=${wsReady}`, 'log-ok');
+    } else {
+      log(`[rpc-debug] start resolved (bundle engine)`, 'log-ok');
+    }
     await engine.handshake();
     engine.newGame();
   } catch (e) {
