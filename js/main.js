@@ -1120,6 +1120,7 @@ async function startGame(gameId, parentSignal) {
     renderGameList();
     if (selectedGameId === gameId) {
       selectedGameId = null;
+      window.selectedGameId = null;
       const next = activeGames.keys().next();
       if (!next.done) selectGame(next.value);
       else clearBoardView();
@@ -1254,7 +1255,7 @@ async function handleGameState(state, gs, gameChess) {
       else if (delta > 200) { try { await client.chat(state.id, 'player', "I think you might have made a mistake."); } catch(e){} }
     }
     state.prevMoveEval = state.lastEval ? { ...state.lastEval } : null;
-    if (window.pushEval && state.pendingMoveEval && state.pendingMoveEval.scoreCp != null) window.pushEval(state.pendingMoveEval.scoreCp);
+    if (window.pushEval && state.pendingMoveEval && state.pendingMoveEval.scoreCp != null) window.pushEval(state.pendingMoveEval.scoreCp, null, state.id);
     await client.makeMove(state.id, result.bestmove);
   } catch (e) {
     log(`move submission failed for game ${state.id}: ${errDetail(e)}`, 'log-err');
@@ -1378,6 +1379,7 @@ function renderGameList() {
 
 function selectGame(id) {
   selectedGameId = id;
+  window.selectedGameId = id;
   resetTelemetry();
   renderGameList();
   const state = activeGames.get(id);
@@ -1388,6 +1390,8 @@ function clearBoardView() {
   boardSvg.innerHTML = '';
   gameInfoEl.textContent = 'No active game selected';
   resetTelemetry();
+  selectedGameId = null;
+  window.selectedGameId = null;
 }
 
 function fmtClock(ms) {
@@ -1759,12 +1763,14 @@ if (libInput) {
 }
 
 refreshLibraryUI();
-let evalPoints=[]; window.pushEval=(cp,mateIn)=>{evalPoints.push({cp,mateIn,mv:evalPoints.length+1}); const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints,720,280,getChartOpts()); const s=document.getElementById('eval-scroll'); if(s){ s.max=Math.max(0,evalPoints.length-1); } };
+let evalPoints=[]; window.pushEval=(cp,mateIn,gameId)=>{evalPoints.push({cp,mateIn,gameId:gameId||null,mv:evalPoints.length+1}); const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints,720,280,getChartOpts()); const s=document.getElementById('eval-scroll'); if(s){ const fp=getFilteredPoints(); s.max=Math.max(0,fp.length-1); } };
 let chartScrollStart=0;
 function getChartOpts() { const m=document.getElementById('eval-y-mode'); return {yMode:(m&&m.value)||'fixed',yFixed:+(document.getElementById('eval-y-fixed')?.value||300)}; }
-window.applyChartOptions=()=>{ const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,evalPoints.slice(chartScrollStart,chartScrollStart+50),720,280,getChartOpts()); };
-window.applyChartScroll=(v)=>{ chartScrollStart=+v; const c=document.getElementById("eval-chart"); if(c) { const pts=evalPoints.slice(chartScrollStart,Math.min(evalPoints.length,chartScrollStart+50)); renderEvalChart(c,pts,720,280,getChartOpts()); const lbl=document.getElementById('eval-scroll-label'); if(lbl) lbl.textContent='move '+(pts[0]?.mv||0); } };
-window.openChartModal=()=>{ const pts=evalPoints.slice(chartScrollStart,chartScrollStart+80); if(typeof openChartModal==='function') openChartModal(pts,getChartOpts()); };
+function getFilteredPoints() { const sid = (typeof window !== 'undefined' && window.selectedGameId) ? window.selectedGameId : null; return sid ? evalPoints.filter(p => p.gameId === sid) : evalPoints.filter(p => !p.gameId); }
+window.getFilteredPoints = getFilteredPoints;
+window.applyChartOptions=()=>{ const c=document.getElementById("eval-chart"); if(c) renderEvalChart(c,getFilteredPoints().slice(chartScrollStart,chartScrollStart+50),720,280,getChartOpts()); };
+window.applyChartScroll=(v)=>{ chartScrollStart=+v; const c=document.getElementById("eval-chart"); if(c) { const pts=getFilteredPoints().slice(chartScrollStart,Math.min(getFilteredPoints().length,chartScrollStart+50)); renderEvalChart(c,pts,720,280,getChartOpts()); const lbl=document.getElementById('eval-scroll-label'); if(lbl) lbl.textContent='move '+(pts[0]?.mv||0); } };
+window.openChartModal=()=>{ const pts=getFilteredPoints().slice(chartScrollStart,chartScrollStart+80); if(typeof openChartModal==='function') openChartModal(pts,getChartOpts()); };
 
 // Rust-server WebSocket indicator + connection
 (function initWsIndicator() {
